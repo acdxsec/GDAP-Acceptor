@@ -1,0 +1,7 @@
+src/bin/
+src/obj/
+dist/
+vendor/
+*.pfx
+*.key
+.env*

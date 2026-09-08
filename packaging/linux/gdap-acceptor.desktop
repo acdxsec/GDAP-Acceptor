@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=GDAP Acceptor
+Exec=/opt/gdap-acceptor/gdap-acceptor %u
+TryExec=/opt/gdap-acceptor/gdap-acceptor
+Terminal=true
+MimeType=x-scheme-handler/gdap-acceptor;
+NoDisplay=true

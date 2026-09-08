@@ -1,0 +1,9 @@
+Package: gdap-acceptor
+Version: 0.1.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: acdxsec
+Depends: powershell (>= 7.6), xdg-utils
+Description: Interactive GDAP acceptance companion for custom CIPP
+ Independently packaged acceptance launcher for authorized MSP operators.

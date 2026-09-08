@@ -1,0 +1,42 @@
+name: Verify development companion
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+          - os: windows-latest
+            runtime: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: MSCloudInternals/M365Internals
+          ref: 21e8728b9491eda1c13e1e05ce03678ca75d64cc
+          path: vendor/upstream
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Native URI contracts
+        run: dotnet run --project src -- self-test
+      - name: Approval safety contracts
+        shell: pwsh
+        run: ./tests/functions/Approve-GdapRelationship.Checks.ps1
+      - name: Assemble development payload
+        shell: pwsh
+        run: ./tools/Build-Package.ps1 -Runtime '${{ matrix.runtime }}' -UpstreamSource ./vendor/upstream
+      - uses: actions/upload-artifact@v4
+        with:
+          name: development-only-${{ matrix.runtime }}
+          path: dist/${{ matrix.runtime }}
+          retention-days: 7
+          if-no-files-found: error
+      # Artifacts are not signed installers. No release or deployment step exists.
