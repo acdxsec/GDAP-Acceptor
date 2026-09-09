@@ -39,4 +39,53 @@ jobs:
           path: dist/${{ matrix.runtime }}
           retention-days: 7
           if-no-files-found: error
-      # Artifacts are not signed installers. No release or deployment step exists.
+      # Development artifacts only. No release or deployment step exists.
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: development-only-win-x64
+          path: dist/win-x64
+      - uses: actions/download-artifact@v4
+        with:
+          name: development-only-linux-x64
+          path: dist/linux-x64
+      - name: Install open-source MSI authoring tools
+        run: sudo apt-get update && sudo apt-get install -y wixl msitools
+      - name: Build unsigned installers and upgrade fixture
+        shell: pwsh
+        run: |
+          ./tools/Build-Installers.ps1
+          ./tools/Build-Installers.ps1 -Version 0.1.1 -OutputDirectory dist/upgrade-test
+          ./tools/Test-Installers.ps1 -Directory dist/installers
+          ./tools/Test-Installers.ps1 -Directory dist/upgrade-test -Version 0.1.1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-development-installers
+          path: |
+            dist/installers/*.msi
+            dist/installers/*.deb
+            dist/upgrade-test/*.msi
+          retention-days: 7
+          if-no-files-found: error
+  windows-installer:
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned-development-installers
+          path: dist
+      - name: Isolated per-user installer lifecycle
+        shell: pwsh
+        run: ./tools/Test-WindowsInstaller.ps1 -Msi dist/installers/gdap-acceptor-0.1.0-x64.msi -UpgradeMsi dist/upgrade-test/gdap-acceptor-0.1.1-x64.msi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-installer-logs
+          path: ${{ runner.temp }}/gdap-msi-*.log
+          retention-days: 7

@@ -9,6 +9,8 @@ read from explicitly enrolled local configuration, never trusted from the URI.
 This is a development implementation. Production promotion is blocked on live
 portal-schema verification, Windows/Kubuntu desktop testing, and signed packages.
 No production release or unattended installation is available yet.
+CI builds unsigned development MSI/Debian artifacts and exercises the Windows
+installer on disposable runners. These are not approved workstation installers.
 
 ## Enrollment
 
@@ -45,3 +47,18 @@ with the pinned MIT-licensed M365Internals sources. Users do not need a module
 installation or repository checkout. Third-party notices must remain in packages.
 Signing must happen in a managed release environment; never bypass signature or
 APT verification to promote a package. See `docs/RELEASE-GATES.md`.
+
+On Linux, after assembling both runtime payloads, run
+`pwsh -File tools/Build-Installers.ps1` with `wixl`, `msiinfo` (GNOME msitools),
+and `dpkg-deb` installed. Then run
+`pwsh -File tools/Test-Installers.ps1 -Directory dist/installers`.
+The builder refuses existing output files; use a fresh output directory or version.
+MSI authoring uses HKCU and `%LocalAppData%`; Debian installs under `/opt` and ships
+a desktop entry without modifying any user's handler preference. Handler selection
+must happen in the intended user's desktop session, never via root `xdg-mime`.
+
+The workflow also builds a 0.1.1 upgrade fixture from the same payload solely for
+lifecycle testing. Neither version is a published release. Windows CI checks
+handler collision refusal, per-user-only context, installation, upgrade, downgrade
+rejection, removal and enrollment retention. Target-desktop tests, failure rollback,
+multi-user isolation, signing and a signed APT repository remain release gates.

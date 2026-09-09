@@ -14,8 +14,10 @@ installer or a Microsoft-supported approval API. The following gates remain:
 - Verify Windows 11 native activation and Kubuntu 26.04 desktop activation,
   temporary-profile cleanup after cancellation/crash, multi-user queue isolation,
   visible terminal lifetime, upgrade, removal, and configuration rollback.
-- Produce and sign a per-user MSI with a managed signing identity. The registry
-  helper is development-only. Research suggesting a per-machine MSI is not the
+- Unsigned per-user MSI/Debian authoring and metadata checks are implemented;
+  Windows lifecycle CI is included. Validate interrupted-upgrade rollback and
+  multi-user behavior, then sign a per-user MSI with a managed signing identity.
+  The registry helper is development-only. Research suggesting a per-machine MSI is not the
   product decision. Never change the installation context during an upgrade.
 - Verify package dependencies on a clean Kubuntu 26.04 VM; publish the Debian
   package through a scoped signed APT repository. Do not run xdg-mime as root.
