@@ -16,5 +16,6 @@ $License = Get-ChildItem $UpstreamSource -File | Where-Object Name -Match '^LICE
 if (-not $License) { throw 'Required upstream MIT notice was not found.' }
 Copy-Item $License.FullName "$Destination/M365Internals-LICENSE.txt" -Force
 Copy-Item "$Root/README.md" $Destination -Force
+Copy-Item "$Root/docs" $Destination -Recurse -Force
 Copy-Item "$Root/LICENSE" "$Destination/LICENSE" -Force
 Write-Output "Assembled development package: $Destination. Signing and release gates have not been satisfied."

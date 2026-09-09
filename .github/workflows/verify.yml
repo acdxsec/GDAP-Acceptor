@@ -27,6 +27,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Native URI contracts
         run: dotnet run --project src -- self-test
+      - name: Local state and separate-process contracts
+        run: dotnet run --project tests/StateContracts
       - name: Approval safety contracts
         shell: pwsh
         run: ./tests/functions/Approve-GdapRelationship.Checks.ps1

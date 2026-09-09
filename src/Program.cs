@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -18,7 +16,6 @@ internal sealed record Invitation(string InstanceId, string RelationshipId);
 internal static class Acceptor
 {
     private static readonly string State = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "gdap-acceptor");
-    private static readonly string ConfigPath = Path.Combine(State, "instances.json");
     private static readonly Regex IdPattern = new("\\A[A-Za-z0-9][A-Za-z0-9_-]{0,255}\\z", RegexOptions.CultureInvariant);
 
     internal static Invitation ParseInvitation(string text)
@@ -39,22 +36,19 @@ internal static class Acceptor
         return uri.GetLeftPart(UriPartial.Authority);
     }
 
-    private static Dictionary<string, Instance> ReadInstances() => File.Exists(ConfigPath)
-        ? JsonSerializer.Deserialize<Dictionary<string, Instance>>(File.ReadAllText(ConfigPath)) ?? new()
-        : new();
-
-    private static void CreatePrivateDirectory(string path)
-    {
-        Directory.CreateDirectory(path);
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-    }
-
     internal static async Task<int> Run(string[] args)
     {
         try
         {
             if (args.SequenceEqual(new[] { "self-test" })) { SelfTest(); return 0; }
-            CreatePrivateDirectory(State);
+            var local = new LocalState(State);
+            if (args.SequenceEqual(new[] { "queue", "status" }))
+            {
+                var active = local.Active();
+                Console.WriteLine(JsonSerializer.Serialize(new { pending = local.Pending(), activeOrNeedsReview = active?.Invitation }, new JsonSerializerOptions { WriteIndented = true }));
+                Console.WriteLine("An active reservation is not proof of a running process. Inspect stopped runs before recovery; reservations never expire automatically.");
+                return 0;
+            }
             if (args.Length == 3 && args[0] == "diagnostics" && args[1] == "export")
             {
                 using var output = new FileStream(Path.GetFullPath(args[2]), FileMode.CreateNew, FileAccess.Write, FileShare.None);
@@ -74,63 +68,34 @@ internal static class Acceptor
                 var instance = new Instance(ValidateBaseUrl(args[3]), partner.ToString());
                 Console.WriteLine($"Trust CIPP {instance.BaseUrl}, instance {instanceId}, partner {partner}? Type TRUST to save:");
                 if (Console.ReadLine() != "TRUST") return 1;
-                var instances = ReadInstances();
-                if (instances.TryGetValue(instanceId.ToString(), out var old) && old != instance) throw new ArgumentException("Instance is already enrolled with a different URL or partner. Remove it explicitly before changing its identity.");
-                instances[instanceId.ToString()] = instance;
-                File.WriteAllText(ConfigPath, JsonSerializer.Serialize(instances, new JsonSerializerOptions { WriteIndented = true }));
+                local.Enroll(instanceId.ToString(), instance);
                 return 0;
             }
             if (args.Length == 3 && args[0] == "instance" && args[1] == "remove")
             {
-                var instances = ReadInstances();
-                instances.Remove(Guid.ParseExact(args[2], "D").ToString());
-                File.WriteAllText(ConfigPath, JsonSerializer.Serialize(instances));
+                local.RemoveInstance(Guid.ParseExact(args[2], "D").ToString());
                 return 0;
             }
-            if (args.Length != 1) { Console.WriteLine("gdap-acceptor <invitation-uri> | instance add <instance-id> <https-origin> <partner-tenant-id> | instance remove <instance-id> | diagnostics export <new-file> | self-test"); return 2; }
+            if (args.Length != 1) { Console.WriteLine("gdap-acceptor <invitation-uri> | instance add <instance-id> <https-origin> <partner-tenant-id> | instance remove <instance-id> | queue status | diagnostics export <new-file> | self-test"); return 2; }
             var invitation = ParseInvitation(args[0]);
-            var settings = ReadInstances();
-            if (!settings.ContainsKey(invitation.InstanceId)) throw new ArgumentException("CIPP instance is not enrolled. Run instance add first.");
-            var queue = Path.Combine(State, "queue");
-            CreatePrivateDirectory(queue);
-            if (Directory.EnumerateFiles(queue, "*.json").Count() >= 20) throw new ArgumentException("The local invitation queue is full.");
-            var key = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(invitation.InstanceId + "/" + invitation.RelationshipId)));
-            var pending = Path.Combine(queue, key + ".json");
-            try { using var file = new FileStream(pending, FileMode.CreateNew, FileAccess.Write, FileShare.None); JsonSerializer.Serialize(file, invitation); }
-            catch (IOException) when (File.Exists(pending)) { Console.WriteLine("This invitation is already queued or active."); }
-            Console.WriteLine("Waiting for the local acceptance window...");
-            var deadline = DateTime.UtcNow.AddMinutes(10);
-            var ownResult = 1;
-            while (File.Exists(pending) && DateTime.UtcNow < deadline)
+            if (!local.Enqueue(invitation)) { Console.WriteLine("This invitation is already queued or active. Use queue status to inspect it; no acceptance was started here."); return 1; }
+            Console.WriteLine("Waiting for the local acceptance window (up to ten minutes). Use queue status to inspect active or interrupted work.");
+            var waiting = Stopwatch.StartNew();
+            while (waiting.Elapsed < TimeSpan.FromMinutes(10) && local.Pending().Contains(invitation))
             {
-                FileStream lease;
-                try { lease = new FileStream(Path.Combine(State, "acceptance.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
-                catch (IOException) { await Task.Delay(500); continue; }
-                using (lease)
-                {
-                    foreach (var file in Directory.EnumerateFiles(queue, "*.json").OrderBy(File.GetCreationTimeUtc))
-                    {
-                        try
-                        {
-                            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(file) > TimeSpan.FromMinutes(10)) { Console.WriteLine("An expired queued invitation was discarded; launch it again if needed."); continue; }
-                            var next = JsonSerializer.Deserialize<Invitation>(File.ReadAllText(file)) ?? throw new ArgumentException("Invalid queued invitation.");
-                            next = ParseInvitation($"gdap-acceptor://v1/accept/{next.InstanceId}/{next.RelationshipId}");
-                            var current = ReadInstances();
-                            if (!current.TryGetValue(next.InstanceId, out var enrolled)) throw new ArgumentException("Queued instance was removed.");
-                            var accepted = await Accept(next, enrolled);
-                            if (file == pending) ownResult = accepted ? 0 : 1;
-                        }
-                        catch { Console.WriteLine("Acceptance stopped. Inspect the Microsoft invitation and CIPP status before retrying."); }
-                        finally { File.Delete(file); }
-                    }
-                }
+                using var claim = local.TryClaim(invitation);
+                if (claim is null) { await Task.Delay(500); continue; }
+                var accepted = await Accept(claim.Active.Invitation, claim.Active.Instance);
+                // An exception or process death leaves the durable claim intact.
+                // A normal return means preflight stopped or the child exited.
+                local.Complete(claim);
+                return accepted ? 0 : 1;
             }
-            // A different process may have drained our queue entry. Without its
-            // result, never represent disappearance as confirmed acceptance.
-            return File.Exists(pending) ? 1 : ownResult;
+            Console.WriteLine("The pending invitation expired or is no longer available. Acceptance was not confirmed.");
+            return 1;
         }
         catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 2; }
-        catch { Console.Error.WriteLine("GDAP Acceptor stopped. Check local prerequisites and configuration."); return 1; }
+        catch { Console.Error.WriteLine("GDAP Acceptor stopped. Check prerequisites, configuration and queue status. Legacy pending work or an interrupted acceptance requires operator review; no automatic reset was attempted."); return 1; }
     }
 
     private static async Task<bool> Accept(Invitation invitation, Instance instance)
@@ -140,15 +105,15 @@ internal static class Acceptor
         if (partner == Guid.Empty) throw new ArgumentException("Invalid enrolled partner.");
         Console.WriteLine($"CIPP: {baseUrl}\nPartner tenant: {partner}\nRelationship: {invitation.RelationshipId}");
         Console.Write("Expected CUSTOMER tenant ID (before authentication): ");
-        if (!Guid.TryParseExact(Console.ReadLine(), "D", out var customer) || customer == Guid.Empty) throw new ArgumentException("A customer tenant ID is required.");
+        if (!Guid.TryParseExact(Console.ReadLine(), "D", out var customer) || customer == Guid.Empty) { Console.WriteLine("A customer tenant ID is required. No authentication was started."); return false; }
         var fallback = $"https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/{Uri.EscapeDataString(invitation.RelationshipId)}";
         Console.WriteLine($"Microsoft fallback: {fallback}");
         var pwsh = OperatingSystem.IsWindows()
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe")
             : "/usr/bin/pwsh";
-        if (!File.Exists(pwsh)) throw new ArgumentException("PowerShell 7 is required at its standard installation location.");
+        if (!File.Exists(pwsh)) { Console.WriteLine("PowerShell 7 is required at its standard installation location. No authentication was started."); return false; }
         var wrapper = Path.Combine(AppContext.BaseDirectory, "scripts", "Invoke-Acceptance.ps1");
-        if (!File.Exists(wrapper)) throw new ArgumentException("The bundled acceptance payload is missing. Install a complete package.");
+        if (!File.Exists(wrapper)) { Console.WriteLine("The bundled acceptance payload is missing. Install a complete package. No authentication was started."); return false; }
         var start = new ProcessStartInfo(pwsh) { UseShellExecute = false };
         foreach (var value in new[] { "-NoLogo", "-NoProfile", "-File", wrapper, "-RelationshipId", invitation.RelationshipId,
             "-ExpectedTenantId", customer.ToString(), "-ExpectedPartnerTenantId", partner.ToString() }) start.ArgumentList.Add(value);

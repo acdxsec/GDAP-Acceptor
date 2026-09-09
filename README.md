@@ -38,10 +38,14 @@ application-data directory. No authentication state is persisted by the launcher
 Export these records with `gdap-acceptor diagnostics export <new-output-file>`.
 Queued entries expire after ten minutes and still require fresh authentication
 and confirmation. A stopped run must not be treated as an accepted invitation.
+Use `gdap-acceptor queue status` to inspect local pending/active work. Active
+reservations never expire automatically; interrupted and legacy pending work may
+require operator review. See [local-state safety and recovery](docs/LOCAL-STATE.md).
 
 ## Build and verification
 
-Run `dotnet run --project src -- self-test` and the approval regression checks.
+Run `dotnet run --project src -- self-test`,
+`dotnet run --project tests/StateContracts`, and the approval regression checks.
 Use `tools/Build-Package.ps1` to assemble a self-contained Windows or Linux build
 with the pinned MIT-licensed M365Internals sources. Users do not need a module
 installation or repository checkout. Third-party notices must remain in packages.
