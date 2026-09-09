@@ -9,7 +9,7 @@ $Directory = (Resolve-Path $Directory).Path
 $Msi = "$Directory/gdap-acceptor-$Version-x64.msi"
 $Deb = "$Directory/gdap-acceptor_${Version}_amd64.deb"
 function Assert($Condition, $Message) { if (-not $Condition) { throw $Message } }
-function MsiInfo([string[]]$Arguments) {
+function Read-MsiMetadata([string[]]$Arguments) {
     $Lines = if ($MsiToolsImage) {
         & podman run --rm --network none --entrypoint msiinfo -v "${Directory}:${Directory}:ro" $MsiToolsImage @Arguments
     } else { & msiinfo @Arguments }
@@ -17,7 +17,7 @@ function MsiInfo([string[]]$Arguments) {
     return $Lines
 }
 function Table([string]$Name) {
-    $Lines = @(MsiInfo @('export', $Msi, $Name))
+    $Lines = @(Read-MsiMetadata @('export', $Msi, $Name))
     # MSI's IDT export is tab-delimited, not CSV: quotes are literal data.
     $Columns = $Lines[0].Split("`t")
     foreach ($Line in $Lines | Select-Object -Skip 3) {
@@ -29,7 +29,7 @@ function Table([string]$Name) {
 $Properties = @(Table Property)
 Assert (-not ($Properties | Where-Object Property -eq ALLUSERS)) 'MSI changed to per-machine context'
 Assert (($Properties | Where-Object Property -eq ProductVersion).Value -eq $Version) 'Wrong MSI version'
-$Summary = (MsiInfo @('suminfo', $Msi)) -join "`n"
+$Summary = (Read-MsiMetadata @('suminfo', $Msi)) -join "`n"
 Assert ($Summary -match 'Template: x64;1033' -and $Summary -match 'Source: 10') 'MSI must be x64, compressed and limited-privilege'
 $Registry = @(Table Registry)
 Assert ($Registry.Count -gt 4 -and -not ($Registry | Where-Object Root -ne 1)) 'MSI must write only HKCU'
