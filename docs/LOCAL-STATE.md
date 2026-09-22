@@ -25,6 +25,22 @@ No test invokes authentication or supplies a production-state override to the CL
   reviewed interrupted work; it never authenticates or replays the invitation.
   There is no automatic expiry of active work or automatic approval retry.
 
+## Known handled-error limitation (0.1.5)
+
+A PowerShell child that catches an approval error and exits normally with a
+nonzero exit code currently clears its reservation, including when a submitted
+approval has an unknown outcome. Its generic error output also loses the specific
+unknown-outcome classification. Consequently an empty queue is not proof that no
+approval was submitted, and another explicit launch is not forced through
+`queue resolve`. There is still no automatic retry, and a new launch still checks
+customer/partner/access/state and requires applicable confirmation.
+
+After **any approval error**, inspect the Microsoft relationship outcome before
+launching the invitation again, even if the queue is empty. Preserving a distinct
+uncertain outcome across the wrapper/native boundary is tracked in
+[issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2). Process-death and
+unhandled native-exception reservations remain protected as described above.
+
 Run `gdap-acceptor queue status` for pending and active-or-needs-review identities.
 This observation cannot establish whether an approval succeeded, whether a child
 process still runs, or whether CIPP started onboarding. Inspect Microsoft and CIPP

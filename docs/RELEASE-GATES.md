@@ -81,6 +81,11 @@ not used to change the invitation's terms.
 
 ## Remaining gates
 
+- A handled child-process approval error can clear its reservation even when the
+  write outcome is uncertain. No automatic retry occurs, but the next explicit
+  launch is not forced through outcome-review recovery. Inspect the Microsoft
+  outcome after any approval error, even if the queue is empty. Preserving this
+  review gate is tracked in [issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2).
 - Navigation now pins the validated browser tab. A competing admin-centre tab
   reproduced the reported readiness timeout offline; that test now passes.
   Actual Edge on an isolated blank page also passed the production page-state
