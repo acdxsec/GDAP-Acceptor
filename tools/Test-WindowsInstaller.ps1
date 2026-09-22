@@ -22,7 +22,13 @@ function CheckInstalledLauncher {
     $Shell = New-Object -ComObject WScript.Shell
     $Link = $Shell.CreateShortcut($Shortcut)
     Assert ($Link.TargetPath -eq "$Install\gdap-acceptor.exe".Replace('/', '\')) 'Start Menu shortcut points to a different launcher'
-    Assert ($Link.WorkingDirectory -eq $Install.Replace('/', '\')) 'Start Menu working directory is incorrect'
+    # MSI directory properties include a trailing separator; shell shortcut
+    # paths may retain it. Compare directories, not that serialization detail.
+    $ObservedDirectory = [string]$Link.WorkingDirectory
+    Assert (-not [string]::IsNullOrWhiteSpace($ObservedDirectory)) 'Start Menu working directory is empty'
+    $ExpectedDirectory = [IO.Path]::GetFullPath($Install).TrimEnd([char[]]'\/')
+    $ActualDirectory = [IO.Path]::GetFullPath($ObservedDirectory).TrimEnd([char[]]'\/')
+    Assert ($ActualDirectory -eq $ExpectedDirectory) "Start Menu working directory is incorrect. Expected: $ExpectedDirectory; observed: $ActualDirectory"
     & "$Install/gdap-acceptor.exe" self-test
     Assert ($LASTEXITCODE -eq 0) 'Installed launcher contracts failed'
     $Help = & "$Install/gdap-acceptor.exe" --help
