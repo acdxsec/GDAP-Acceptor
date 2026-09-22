@@ -21,8 +21,8 @@ Check 'LoginBootstrap.Checks' $payload
 foreach ($route in @('PortalRedirect', 'UnsafeRedirect', 'MissingRedirect')) { Check 'LoginBootstrap.Checks' ($payload + @('-LoginRoute', $route)) }
 foreach ($cookie in @('Missing', 'Present')) { Check 'PortalBootstrap.Checks' ($payload + @('-TenantCookie', $cookie)) }
 foreach ($cookie in @('Missing', 'Present')) { Check 'PortalBootstrap.Checks' ($payload + @('-TenantCookie', $cookie, '-PortalRequestDiagnostics')) }
-foreach ($scenario in @('Complete', 'Close', 'Timeout', 'ValidationFailure')) { Check 'BrowserCompletion.Checks' ($payload + @('-Scenario', $scenario)) }
-foreach ($scenario in @('Ready', 'CompetingTab', 'CdpNoise', 'NoPageState', 'WrongRoute', 'NavigationFailure', 'BrowserClosed', 'TenantChanged', 'MissingId')) { Check 'WhatIf.Checks' ($payload + @('-InvitationScenario', $scenario)) }
+foreach ($scenario in @('Complete', 'Close', 'Timeout', 'ValidationFailure', 'ProcessHandoff')) { Check 'BrowserCompletion.Checks' ($payload + @('-Scenario', $scenario)) }
+foreach ($scenario in @('Ready', 'CompetingTab', 'CdpNoise', 'NoPageState', 'WrongRoute', 'NavigationFailure', 'BrowserClosed', 'ProcessHandoff', 'TenantChanged', 'MissingId')) { Check 'WhatIf.Checks' ($payload + @('-InvitationScenario', $scenario)) }
 foreach ($scenario in @('Wrong', 'WrongExpected', 'Missing', 'Conflict', 'HttpError', 'TransportError', 'ShellFallback')) { Check 'WhatIf.Checks' ($payload + @('-TenantCookieFormat', 'Missing', '-LiveTenantScenario', $scenario)) }
 foreach ($format in @('Plain', 'Quoted', 'Opaque', 'Missing')) { Check 'WhatIf.Checks' ($payload + @('-TenantCookieFormat', $format)) }
 Check 'WhatIf.Checks' ($payload + @('-TenantCookiePath', '/adminportal'))

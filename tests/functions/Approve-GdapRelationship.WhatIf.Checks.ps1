@@ -5,7 +5,7 @@ param(
     [ValidateSet('/', '/adminportal')][string]$TenantCookiePath = '/',
     [ValidateSet('Plain', 'Quoted', 'Opaque', 'Missing')][string]$TenantCookieFormat = 'Plain',
     [ValidateSet('Match', 'Wrong', 'WrongExpected', 'Missing', 'Conflict', 'HttpError', 'TransportError', 'ShellFallback')][string]$LiveTenantScenario = 'Match',
-    [ValidateSet('Ready', 'CompetingTab', 'CdpNoise', 'NoPageState', 'WrongRoute', 'NavigationFailure', 'BrowserClosed', 'TenantChanged', 'MissingId')][string]$InvitationScenario = 'Ready',
+    [ValidateSet('Ready', 'CompetingTab', 'CdpNoise', 'NoPageState', 'WrongRoute', 'NavigationFailure', 'BrowserClosed', 'ProcessHandoff', 'TenantChanged', 'MissingId')][string]$InvitationScenario = 'Ready',
     [switch]$SubmitSyntheticApproval,
     [switch]$RequireApprovalConfirmation,
     [ValidateSet('Explicit', 'Default')][string]$ConfirmationPolicy = 'Explicit',
@@ -159,7 +159,7 @@ if (-not $probe.Launched -or -not $probe.Stopped -or [IO.Directory]::Exists($pro
     function script:Start-Sleep {
         param($Seconds, $Milliseconds)
         $script:gdapClock = $script:gdapClock.AddSeconds([double]$Seconds)
-        if ($script:gdapProbe.Navigations -gt 0 -and $script:gdapPageScenario -eq 'BrowserClosed') { $script:gdapFakeProcess.HasExited = $true }
+        if ($script:gdapProbe.Navigations -gt 0 -and $script:gdapPageScenario -in @('BrowserClosed', 'ProcessHandoff')) { $script:gdapFakeProcess.HasExited = $true }
     }
     function script:Get-M365BrowserPreferredTargetContext {
         if ($script:gdapPageScenario -eq 'CompetingTab' -and $script:gdapProbe.Navigations -gt 0) {
@@ -171,6 +171,11 @@ if (-not $probe.Launched -or -not $probe.Stopped -or [IO.Directory]::Exists($pro
     }
     function script:Invoke-M365BrowserCdpCommand {
         param($WebSocketUrl, $Method, $Params)
+        if ($Method -eq 'Browser.close') {
+            if ($WebSocketUrl -ne 'ws://test.invalid') { throw 'Cleanup selected another browser' }
+            return
+        }
+        if ($script:gdapPageScenario -eq 'BrowserClosed' -and $script:gdapFakeProcess.HasExited) { throw 'Synthetic closed CDP endpoint' }
         if ($Method -eq 'Page.navigate') {
             if (-not $script:m365PortalConnection.Validated -or $script:gdapProbe.Stopped) { throw 'Navigation preceded session validation or followed browser closure' }
             if ($Params.url -cne 'https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/whatif-test') { throw 'Wrong invitation navigation URL' }
@@ -204,7 +209,7 @@ if (-not $probe.Launched -or -not $probe.Stopped -or [IO.Directory]::Exists($pro
 if ($LiveTenantScenario -eq 'WrongExpected') { $arguments.ExpectedTenantId = '22222222-2222-2222-2222-222222222222' }
 $diagnostic = $null
 try { $null = & $ApprovalScript @arguments } catch {
-    if (-not $RequireApprovalConfirmation -and $LiveTenantScenario -in @('Match', 'ShellFallback') -and $InvitationScenario -in @('Ready', 'CompetingTab', 'CdpNoise') -and (-not $DiscoverCustomer -or $CustomerSelection -eq 'Accept')) { throw }
+    if (-not $RequireApprovalConfirmation -and $LiveTenantScenario -in @('Match', 'ShellFallback') -and $InvitationScenario -in @('Ready', 'CompetingTab', 'CdpNoise', 'ProcessHandoff') -and (-not $DiscoverCustomer -or $CustomerSelection -eq 'Accept')) { throw }
     $diagnostic = $_.Exception.Message
 }
 $pageDiagnostic = switch ($InvitationScenario) {

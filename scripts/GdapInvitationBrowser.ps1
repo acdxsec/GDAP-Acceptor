@@ -73,6 +73,8 @@ function Connect-GdapInvitationBrowser {
     $profile = Resolve-M365BrowserProfileConfiguration -PrivateSession
     $process = $null
     $socket = $null
+    $browserSocket = $null
+    $handoffReported = $false
     try {
         $userAgent = Get-M365DefaultUserAgent
         $startUrl = Get-M365BrowserInteractiveStartUrl -Username $AuthenticationParameters.Username -TenantId $AuthenticationParameters.TenantId -UserAgent $userAgent
@@ -83,21 +85,29 @@ function Connect-GdapInvitationBrowser {
         $process = Start-M365BrowserProcess -BrowserPath $browser.Path -ArgumentList $arguments -SuppressBrowserOutput:(Test-M365BrowserProcessOutputSuppression)
         $version = Get-M365BrowserCdpVersion -Port $port -TimeoutSeconds 20
         $socket = $version.webSocketDebuggerUrl
+        $browserSocket = $socket
         $deadline = (Get-Date).AddSeconds($AuthenticationParameters.TimeoutSeconds)
         $portal = $null
         $authenticatedPageReady = $false
         do {
             Start-Sleep -Seconds 2
             $process.Refresh()
-            if ($process.HasExited) { throw 'The browser window was closed before sign-in completed.' }
             try {
                 $target = Get-M365BrowserPreferredTargetContext -Port $port -FallbackWebSocketUrl $socket
                 $socket = $target.WebSocketUrl
                 $cookies = @(Get-M365BrowserCookieJar -WebSocketUrl $socket)
                 $portal = New-M365BrowserPortalWebSession -Cookies $cookies -UserAgent $userAgent
             } catch {
+                if ($process.HasExited) { throw 'The browser window was closed before sign-in completed, or its private debugging session became unavailable.' }
                 Write-Verbose 'Waiting for the browser sign-in tab to settle.'
                 continue
+            }
+            # On Windows the launched process may hand off to another browser
+            # process. A responding dedicated CDP session is stronger evidence
+            # of liveness than the original process handle.
+            if ($process.HasExited -and -not $handoffReported) {
+                Write-Host '[GDAP browser] Launch process exited; the private browser session is still responding.'
+                $handoffReported = $true
             }
             $landing = $null
             if ($portal -and [uri]::TryCreate([string]$target.Url, [UriKind]::Absolute, [ref]$landing) -and
@@ -139,8 +149,11 @@ function Connect-GdapInvitationBrowser {
         do {
             Start-Sleep -Seconds 1
             $process.Refresh()
-            if ($process.HasExited) { throw 'The invitation browser was closed before inspection completed.' }
-            $page = Get-GdapBrowserPageState -WebSocketUrl $invitationSocket
+            try { $page = Get-GdapBrowserPageState -WebSocketUrl $invitationSocket }
+            catch {
+                if ($process.HasExited) { throw 'The invitation browser was closed before inspection completed, or its private debugging session became unavailable.' }
+                throw
+            }
             if (-not $page) { $lastPageState = 'No readable page state'; continue }
             $pageUri = $null
             $isPortal = [uri]::TryCreate([string]$page.url, [UriKind]::Absolute, [ref]$pageUri) -and
@@ -172,7 +185,18 @@ function Connect-GdapInvitationBrowser {
     } finally {
         try {
             if ($process) {
-                try { Stop-M365BrowserProcess -Process $process -BrowserWebSocketUrl $socket }
+                try {
+                    $process.Refresh()
+                    # The pinned upstream stop helper returns immediately for
+                    # an exited launch process. Close the dedicated browser via
+                    # its original socket even after a process handoff. Never
+                    # locate/kill another browser by name or use a new socket.
+                    if ($process.HasExited -and $browserSocket) {
+                        try { $null = Invoke-M365BrowserCdpCommand -WebSocketUrl $browserSocket -Method 'Browser.close' }
+                        catch { Write-Verbose 'The dedicated browser debugging session is no longer available for graceful close.' }
+                    }
+                    Stop-M365BrowserProcess -Process $process -BrowserWebSocketUrl $browserSocket
+                }
                 finally { Remove-M365BrowserProcessRedirectFiles -Process $process }
             }
         } finally {
