@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Directory,
-    [string]$Version = '0.1.0',
+    [string]$Version = '0.1.5',
     [string]$MsiToolsImage
 )
 $ErrorActionPreference = 'Stop'

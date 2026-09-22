@@ -4,6 +4,12 @@ Standalone Windows/Linux launcher for an MSP operator accepting a Microsoft GDAP
 invitation created by **unmodified CIPP**. No CIPP custom page, custom image,
 custom API, or locally installed M365Internals checkout is needed.
 
+Development package **0.1.5** includes the Windows browser process-handoff fix:
+an exited launch process no longer stops sign-in while its private browser session
+is still responding. The user completed a Windows interactive dry run with this
+fix, including customer selection and invitation validation. No approval was
+submitted by that test.
+
 ## Run
 
 Install PowerShell 7.6 or newer and Microsoft Edge, Chrome or Chromium first.
@@ -121,7 +127,9 @@ Start Menu shortcut; Linux exposes an application-menu entry. No installer chang
 CIPP or enrolls customer credentials. Runtime/browser prerequisites are not
 silently installed.
 
-**These are development builds, not signed production releases.** The earlier
-packaged PowerShell flow has live acceptance and CIPP handoff evidence; the launcher
-and customer-selection prompt still need target-desktop validation. See
+**These are development builds, not signed production releases.** Linux has
+operator-reported live launcher, acceptance and CIPP handoff evidence. Windows
+sign-in, customer selection and invitation inspection passed an interactive dry
+run; normal Windows launcher approval and Start Menu use still need target-desktop
+validation. See
 [release gates](docs/RELEASE-GATES.md).

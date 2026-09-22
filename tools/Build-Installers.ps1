@@ -3,7 +3,7 @@ param(
     [string]$WindowsPayload = "$PSScriptRoot/../dist/win-x64",
     [string]$LinuxPayload = "$PSScriptRoot/../dist/linux-x64",
     [string]$OutputDirectory = "$PSScriptRoot/../dist/installers",
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.0',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$Version = '0.1.5',
     [switch]$SkipMsiCompilation
 )
 $ErrorActionPreference = 'Stop'

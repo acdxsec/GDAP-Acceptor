@@ -21,6 +21,13 @@ work after using the explicit reservation-recovery command. This is operator-
 reported live launcher evidence, not an automated assertion of every downstream
 onboarding step or of the remaining desktop/release gates.
 
+On September 22, the user completed Windows test revision 2: private Edge sign-in,
+explicit CUSTOMER selection, same-tab invitation navigation, tenant revalidation,
+partner and requested-access validation, and the final WhatIf preview. The output
+confirmed an exited launch process with a still-live private browser session.
+This validates the process-handoff fix on that desktop. No approval was submitted;
+the normal Windows launcher and installed Start Menu path remain separate checks.
+
 ## Existing Windows CI evidence
 
 [GitHub Actions run 34390399881](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/34390399881)
@@ -28,14 +35,19 @@ passed on September 9, 2026, for commit
 `24193a5779946a49280003891ff4fd65d533ce33`. It includes Windows native contracts,
 payload assembly and per-user MSI install, collision/context guards, upgrade,
 downgrade rejection, uninstall and enrollment retention.
-That run predates the current uncommitted browser/launcher/recovery changes.
-It must not be presented as Windows validation of development build 0.1.4.
-The updated source needs a new Windows CI run after publication to its branch;
-re-running the old commit would not test these fixes. The September 22 validation
-update adds installed CLI/wrapper checks, Start Menu shortcut checks, real MSI
-repair and preservation of interrupted reservations, plus isolated Windows Edge
-navigation. These additions require a successful run against their own commit;
-they are not yet Windows pass evidence merely because the checks exist.
+That historical run predates the browser/launcher/recovery changes and is not
+validation of those changes.
+
+[GitHub Actions run 35752406930](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/35752406930)
+passed all four jobs for commit `d86536ec8cb350c7658a70b6659272d11c3b1449`,
+including the process-handoff fix. It covers Windows/Linux native and packaged
+checks, 50 acceptance scenarios, wrapper subprocess checks, isolated Windows
+Edge navigation and unsigned packaging. MSI lifecycle checks cover per-user
+installation, collision/context guards, installed CLI/wrapper and Start Menu
+metadata, repair, upgrade/downgrade, uninstall and enrollment/reservation retention.
+These were disposable-runner checks, not live Microsoft authentication. The
+0.1.5 packaging revision requires its own CI run before distribution; the upgrade
+package 0.1.6 is a test fixture, not a release.
 
 The bundled approval adapter now includes the tested browser-navigation flow,
 the observed portal response contract, live tenant validation, User-Agent fixes
@@ -57,8 +69,9 @@ not used to change the invitation's terms.
   identity checks after they corrected the supplied customer ID. This fixes a
   reproduced targeting gap, not proof that every reported mismatch has that cause.
 - Exercise the new paste-in launcher and explicit authenticated-customer choice
-  on Windows 11. The user reports the normal launcher works on their Linux
-  workstation. Offline contracts cover the selection path,
+  on Windows 11. Windows customer selection and invitation inspection now have
+  live dry-run evidence, but not normal native-launcher approval evidence. The user
+  reports the normal launcher works on their Linux workstation. Offline contracts cover the selection path,
   cancellation, partner-account rejection and tenant changes; they are not
   live browser/MFA tests.
 - Test passkeys, PIM, Conditional Access and browser-management policies in
@@ -90,7 +103,7 @@ Fourteen real PowerShell subprocess checks run the production wrapper against a
 stub approval script. They verify customer-discovery/explicit-customer forwarding,
 required approval confirmation, diagnostics and rejection of every non-active
 result. Raw synthetic exceptions remain suppressed. These checks complement the
-48 browser/identity/approval checks; they complement the user's Linux launcher
+50 browser/identity/approval checks; they complement the user's Linux launcher
 report and do not replace Windows desktop testing.
 
 ## Scope and identity
