@@ -7,9 +7,62 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+# A real local HTTP response avoids OS-specific closed-port refusal timing while
+# still exercising PowerShell's actual header validation and session mutation.
+Add-Type @'
+using System;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+public sealed class GdapBootstrapPeer : IDisposable {
+    readonly TcpListener listener = new TcpListener(IPAddress.Loopback, 0);
+    readonly CancellationTokenSource stop = new CancellationTokenSource();
+    public string Address { get; }
+    public GdapBootstrapPeer() {
+        listener.Start();
+        Address = "http://127.0.0.1:" + ((IPEndPoint)listener.LocalEndpoint).Port + "/";
+        _ = Serve();
+    }
+    async Task Serve() {
+        try {
+            while (!stop.IsCancellationRequested) {
+                using var client = await listener.AcceptTcpClientAsync(stop.Token);
+                using var stream = client.GetStream();
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stop.Token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(10));
+                var one = new byte[1];
+                var header = new StringBuilder();
+                while (!header.ToString().EndsWith("\r\n\r\n", StringComparison.Ordinal)) {
+                    if (header.Length > 65536 || await stream.ReadAsync(one, timeout.Token) != 1) throw new IOException("Invalid fixture request");
+                    header.Append((char)one[0]);
+                }
+                int length = 0;
+                foreach (var line in header.ToString().Split("\r\n"))
+                    if (line.StartsWith("Content-Length:", StringComparison.OrdinalIgnoreCase)) length = int.Parse(line.Substring(15).Trim());
+                if (length < 0 || length > 1048576) throw new IOException("Oversized fixture request");
+                var buffer = new byte[4096];
+                while (length > 0) {
+                    var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(length, buffer.Length)), timeout.Token);
+                    if (read == 0) throw new IOException("Incomplete fixture request");
+                    length -= read;
+                }
+                var response = Encoding.ASCII.GetBytes("HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                await stream.WriteAsync(response, timeout.Token);
+            }
+        } catch (OperationCanceledException) {} catch (ObjectDisposedException) {} catch (SocketException) {}
+    }
+    public void Dispose() { stop.Cancel(); listener.Stop(); }
+}
+'@
+$peer = [GdapBootstrapPeer]::new()
+try {
 $module = Import-Module $ModulePath -PassThru
 & $module {
-    param($CookieMode, $TraceHttp)
+    param($CookieMode, $TraceHttp, $LoopbackAddress)
+    $script:gdapLoopbackAddress = $LoopbackAddress
     $script:gdapRequireHttpLimits = $TraceHttp
     $script:gdapTransportProbe = @{ CookieMode = $CookieMode; Requests = 0; BootstrapReads = 0; PostLandingReads = 0; Navigations = 0; InvitationReads = 0; ApprovalWrites = 0; HeaderFailures = 0; Stopped = $false }
     $script:gdapTransportPage = 'https://admin.cloud.microsoft/'
@@ -57,24 +110,18 @@ $module = Import-Module $ModulePath -PassThru
         if ($script:gdapRequireHttpLimits -and ($ConnectionTimeoutSeconds -ne 30 -or $OperationTimeoutSeconds -ne 30 -or $MaximumRetryCount -ne 0)) { throw 'A real entry-point HTTP call escaped the diagnostic timeout/no-retry policy' }
         $transport = @{}
         foreach ($key in $PSBoundParameters.Keys) { $transport[$key] = $PSBoundParameters[$key] }
-        # Never contact Microsoft. A denied/refused loopback connection is the
-        # expected transport stop AFTER real request/header construction.
-        $transport.Uri = 'http://127.0.0.1:1/'
+        # Never contact Microsoft. Require an actual local response after real
+        # header construction; a timeout is a failure, not an allowed outcome.
+        $transport.Uri = $script:gdapLoopbackAddress
         $transport.NoProxy = $true
-        $transport.ConnectionTimeoutSeconds = 1
-        $transport.OperationTimeoutSeconds = 1
+        $transport.ConnectionTimeoutSeconds = 10
+        $transport.OperationTimeoutSeconds = 10
         $transport.ErrorAction = 'Stop'
         try {
-            $null = Microsoft.PowerShell.Utility\Invoke-WebRequest @transport
-            throw 'Loopback test endpoint unexpectedly answered'
+            $response = Microsoft.PowerShell.Utility\Invoke-WebRequest @transport
+            if ($response.StatusCode -ne 204) { throw 'Loopback fixture did not return the expected response' }
         } catch {
-            $exception = $_.Exception
-            $socketStop = $false
-            while ($exception) {
-                if ($exception -is [Net.Sockets.SocketException] -and $exception.SocketErrorCode -in @('ConnectionRefused', 'AccessDenied')) { $socketStop = $true }
-                $exception = $exception.InnerException
-            }
-            if (-not $socketStop) { $script:gdapTransportProbe.HeaderFailures++; throw }
+            $script:gdapTransportProbe.HeaderFailures++; throw
         }
         if ($WebSession.UserAgent -cne (Get-M365DefaultUserAgent)) { throw 'Request changed the browser User-Agent' }
         $script:gdapTransportProbe.Requests++
@@ -102,9 +149,10 @@ $module = Import-Module $ModulePath -PassThru
         } else { throw 'Unexpected request destination' }
         [pscustomobject]@{ StatusCode = 200; Content = $content; Headers = @{ 'Content-Type' = $contentTypeValue } }
     }
-} $TenantCookie ([bool]$PortalRequestDiagnostics)
+} $TenantCookie ([bool]$PortalRequestDiagnostics) $peer.Address
 $null = & $ApprovalScript -RelationshipId 'transport-test' -ExpectedTenantId '11111111-1111-1111-1111-111111111111' -ExpectedPartnerTenantId '22222222-2222-2222-2222-222222222222' -WhatIf -PortalRequestDiagnostics:$PortalRequestDiagnostics
 $probe = & $module { $script:gdapTransportProbe }
 if ($probe.HeaderFailures -ne 0 -or $probe.InvitationReads -ne 1 -or $probe.ApprovalWrites -ne 0 -or $probe.BootstrapReads -lt 3 -or -not $probe.Stopped) { throw 'Portal transport or approval safety regression' }
 if ($TenantCookie -eq 'Missing' -and $probe.PostLandingReads -lt 2) { throw 'Missing-cookie bootstrap path was not exercised' }
 Write-Output "PASS: $TenantCookie tenant cookie; real bootstrap/validation/request chain preserves User-Agent; WhatIf approval writes=0"
+} finally { $peer.Dispose() }
