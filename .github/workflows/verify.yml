@@ -2,11 +2,14 @@ name: Verify development companion
 on:
   push:
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   verify:
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -25,16 +28,34 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - name: Check PowerShell prerequisite
+        shell: pwsh
+        run: |
+          if ($PSVersionTable.PSVersion -lt [version]'7.6') { throw 'These tests require PowerShell 7.6 or newer.' }
+          Write-Host "Testing commit $env:GITHUB_SHA with PowerShell $($PSVersionTable.PSVersion)"
       - name: Native URI contracts
         run: dotnet run --project src -- self-test
       - name: Local state and separate-process contracts
         run: dotnet run --project tests/StateContracts
-      - name: Approval safety contracts
-        shell: pwsh
-        run: ./tests/functions/Approve-GdapRelationship.Checks.ps1
+      - name: Paste-in launcher workflow contracts
+        run: dotnet run --project tests/LauncherContracts
       - name: Assemble development payload
         shell: pwsh
         run: ./tools/Build-Package.ps1 -Runtime '${{ matrix.runtime }}' -UpstreamSource ./vendor/upstream
+      - name: Packaged browser, identity, approval and cancellation contracts
+        shell: pwsh
+        run: ./tools/Test-Acceptance.ps1 -ModulePath ./dist/${{ matrix.runtime }}/M365Internals/M365Internals.psd1 -ApprovalScript ./dist/${{ matrix.runtime }}/scripts/Approve-GdapRelationship.ps1
+      - name: Packaged launcher-to-PowerShell handoff
+        shell: pwsh
+        run: ./tools/Test-Wrapper.ps1 -Wrapper ./dist/${{ matrix.runtime }}/scripts/Invoke-Acceptance.ps1
+      - name: Isolated Windows Edge navigation (no sign-in)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $candidates = @("${env:ProgramFiles(x86)}/Microsoft/Edge/Application/msedge.exe", "$env:ProgramFiles/Microsoft/Edge/Application/msedge.exe")
+          $edge = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $edge) { throw 'Edge is required for the isolated Windows browser check.' }
+          ./tests/functions/Approve-GdapRelationship.BrowserTransport.Checks.ps1 -ModulePath ./dist/win-x64/M365Internals/M365Internals.psd1 -ApprovalScript ./dist/win-x64/scripts/Approve-GdapRelationship.ps1 -BrowserPath $edge
       - uses: actions/upload-artifact@v4
         with:
           name: development-only-${{ matrix.runtime }}
@@ -80,6 +101,7 @@ jobs:
           if-no-files-found: error
   windows-installer:
     needs: package
+    timeout-minutes: 20
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

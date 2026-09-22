@@ -48,6 +48,9 @@ $session = {
 $argsForApproval = @{ RelationshipId=$id; ExpectedTenantId=$tenant; ExpectedPartnerTenantId=$partner; Request=$request; GetSession=$session; Confirm=$false; ActivationTimeoutSeconds=0 }
 Assert ((Resolve-GdapRelationshipId $id) -ceq $id) 'Composite ID changed'
 Assert ((Resolve-GdapRelationshipId "https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/$id") -ceq $id) 'Invitation parsing failed'
+Assert ((Get-GdapInvitationShape ([pscustomobject]@{})) -ceq 'root:object fields=[]; relationship:null fields=[]') 'Empty response shape diagnostic failed'
+$shape = Get-GdapInvitationShape @{ relationship = @{ id = 'SECRET_SENTINEL'; status = 'SECRET_SENTINEL' }; data = 'SECRET_SENTINEL' }
+Assert ($shape -ceq 'root:object fields=[data,relationship]; relationship:object fields=[id,status]') 'Response shape included values or omitted field names'
 foreach ($bad in @('text with 11111111-1111-1111-1111-111111111111', '../bad', 'a%2fb', 'a?b', 'a#b', 'https://evil.example/id', ('a' * 257))) {
     ExpectFailure { Resolve-GdapRelationshipId $bad } '*'
 }
@@ -80,4 +83,57 @@ ResetScenario; $script:initial = 'expired'
 ExpectFailure { Approve-GdapRelationship @argsForApproval } '*not in an approvable*'
 Assert ($script:posts -eq 0) 'Expired invite wrote'
 Assert ((ConvertTo-GdapDisplayText "hello$([char]27)[31m$([char]10)world") -notmatch '[\p{Cc}\p{Cf}]') 'Terminal controls retained'
-Write-Output 'PASS: identifier, consent, identity, resume, timeout, ambiguous-write, WhatIf, disable, and display regression checks'
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+$connection = [pscustomobject]@{ TenantId = $tenant.ToString(); Validated = $true }
+$identityWeb = [Microsoft.PowerShell.Commands.WebRequestSession]::new()
+$script:identityReads = 0
+$script:identityContent = '{"TID":"' + $tenant.ToString() + '"}'
+$identityRequest = {
+    param($p)
+    Assert ($p.Method -eq 'Get' -and $p.RawResponse) 'Identity check was not a raw GET'
+    Assert ([object]::ReferenceEquals($p.WebSession, $identityWeb)) 'Identity check used another session'
+    Assert ($p.Path -in @('/adminportal/home/ClassicModernAdminDataStream?ref=/homepage', '/admin/api/coordinatedbootstrap/shellinfo')) 'Unexpected identity path'
+    $script:identityReads++
+    @{ StatusCode = 200; Content = $script:identityContent }
+}
+$identity = Get-GdapPortalSessionEvidence $connection $identityWeb $identityRequest
+Assert ($identity.Validated -and $identity.TenantId -eq $tenant.ToString()) 'Cookie-less live identity rejected'
+Assert ($script:identityReads -eq 1) 'Live identity was not read'
+$script:identityContent = '{"TID":"' + $partner.ToString() + '"}'
+ExpectFailure { Get-GdapPortalSessionEvidence $connection $identityWeb $identityRequest } '*active portal tenant changed*'
+Assert ($script:identityReads -eq 2) 'Identity was cached instead of rechecked'
+ExpectFailure { Get-GdapPortalSessionEvidence $connection $null $identityRequest } '*web session is missing*'
+ExpectFailure { Get-GdapPortalSessionEvidence $null $identityWeb $identityRequest } '*session validation is not confirmed*'
+ExpectFailure { Get-GdapPortalSessionEvidence @{ Validated = $false; TenantId = $tenant } $identityWeb $identityRequest } '*session validation is not confirmed*'
+ExpectFailure { Get-GdapPortalSessionEvidence @{ Validated = $true; TenantId = 'not-a-guid' } $identityWeb $identityRequest } '*connection tenant ID is missing or invalid*'
+ExpectFailure { Get-GdapPortalSessionEvidence $connection $identityWeb } '*identity check is unavailable*'
+foreach ($content in @(
+    ('{"TID":"' + $tenant.ToString() + '"}'),
+    ('{"TID": "' + $tenant.ToString() + '"}'),
+    ('\"TID\":\"' + $tenant.ToString() + '\"'),
+    ('O365.TID="' + $tenant.ToString() + '"'),
+    ('O365.TID=\"' + $tenant.ToString() + '\"')
+)) {
+    Assert ((Get-GdapBootstrapTenantId $content) -eq $tenant.ToString()) 'Module-supported bootstrap format rejected'
+}
+Assert ($null -eq (Get-GdapBootstrapTenantId '<html>Sign in</html>')) 'HTML shell accepted as tenant identity'
+Assert ($null -eq (Get-GdapBootstrapTenantId '{"unrelatedId":"11111111-1111-1111-1111-111111111111"}')) 'Unrelated GUID accepted as tenant identity'
+ExpectFailure { Get-GdapBootstrapTenantId '{"TID":"00000000-0000-0000-0000-000000000000"}' } '*invalid tenant ID*'
+ExpectFailure { Get-GdapBootstrapTenantId '{"TID":"11111111-1111-1111-1111-111111111111","other":{"TID":"22222222-2222-2222-2222-222222222222"}}' } '*conflicting tenant IDs*'
+# The public approval function must not write if the live tenant changes
+# between initial inspection and the pre-write consent recheck.
+ResetScenario
+$script:identityReads = 0
+$changingIdentityRequest = {
+    param($p)
+    $script:identityReads++
+    $live = if ($script:identityReads -eq 1) { $tenant } else { $partner }
+    @{ StatusCode = 200; Content = '{"TID":"' + $live.ToString() + '"}' }
+}
+$changingSession = { Get-GdapPortalSessionEvidence $connection $identityWeb $changingIdentityRequest }
+$changingApproval = $argsForApproval.Clone()
+$changingApproval.GetSession = $changingSession
+ExpectFailure { Approve-GdapRelationship @changingApproval } '*active portal tenant changed*'
+Assert ($script:posts -eq 0 -and $script:identityReads -eq 2) 'Tenant switch reached approval or was not rechecked'
+Write-Output 'PASS: identifier, consent, live identity, resume, timeout, ambiguous-write, WhatIf, disable, and display regression checks'

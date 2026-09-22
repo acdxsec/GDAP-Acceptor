@@ -4,12 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>gdap-acceptor</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.0</Version>
   </PropertyGroup>
-  <ItemGroup>
-    <InternalsVisibleTo Include="StateContracts" />
-    <InternalsVisibleTo Include="LauncherContracts" />
-  </ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/GdapAcceptor.csproj" /></ItemGroup>
 </Project>

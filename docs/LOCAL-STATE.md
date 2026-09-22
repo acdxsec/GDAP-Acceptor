@@ -13,16 +13,17 @@ No test invokes authentication or supplies a production-state override to the CL
   Duplicate detection happens before the capacity check. Pending entries expire
   after ten minutes; expiration is not a successful acceptance result.
 - Each waiting launcher executes only its own request. It cannot report another
-  process's result as its own. Each execution still asks for customer identity and
-  fresh authentication; queued requests are not approvals.
+  process's result as its own. Each execution still requires fresh authentication
+  and explicit confirmation of the live customer identity; queued requests are not approvals.
 - Queued work captures the enrolled origin/partner. Removing and re-enrolling an
   instance cannot silently retarget work that is already queued.
 - Active acceptance has a durable reservation and an OS execution lock. Active
   work never expires with pending work. Disposing a handle or killing the launcher
   does not clear the reservation: a child PowerShell/browser may still be running.
-- Only normal completion (preflight stopped or child exited) clears the exact
-  matching reservation. Exceptions leave it for review. No reset/replay command,
-  automatic expiry of active work, or automatic approval retry is provided.
+- Normal completion (preflight stopped or child exited) clears the exact matching
+  reservation. Exceptions leave it for review. Explicit `queue resolve` archives
+  reviewed interrupted work; it never authenticates or replays the invitation.
+  There is no automatic expiry of active work or automatic approval retry.
 
 Run `gdap-acceptor queue status` for pending and active-or-needs-review identities.
 This observation cannot establish whether an approval succeeded, whether a child
@@ -42,10 +43,19 @@ Microsoft invitation and CIPP status, and establish that **all** related launche
 PowerShell and browser processes have stopped. A parent process exiting is not
 sufficient evidence. Do not repeat an ambiguous approval POST as a recovery step.
 
-Any local-state repair is a separate operator maintenance decision. Preserve the
-state and diagnostics first; never remove the entire application-data directory
-or enrollment to clear one request. This development implementation deliberately
-does not automate that decision. Lab-test the process before production use.
+Then run `gdap-acceptor queue resolve`. It displays the reserved relationship,
+origin and partner and requires literal `RESOLVED` to attest that the prior
+processes are stopped and the outcome has been reviewed. It refuses recovery if
+the execution lock is held or the reservation changed while the operator read
+the prompt. A free lock alone does not prove an orphaned child stopped; the
+operator must establish that before confirming.
+
+The command archives the reservation to `reviewed-<token>.json` before removing
+active state and any duplicate pending entry for that invitation. It preserves
+enrollment, other pending work and diagnostics. The archive records local review,
+not a claim of Microsoft acceptance or CIPP success. It never automatically
+starts another invitation. Cancellation leaves the reservation untouched. Never
+remove the entire application-data directory or enrollment to clear one request.
 
 ## Verification limits
 
@@ -53,5 +63,8 @@ Run `dotnet run --project tests/StateContracts` on Windows and Linux. The contra
 cover concurrent enrollment, bounded concurrent admission, pending expiration,
 active serialization, process death/restart, enrollment rebinding and legacy input.
 The tests create isolated temporary directories and report their location.
+`tests/LauncherContracts` also covers recovery cancellation, archival without
+replay, refusal while the execution lock is held, and a reservation changing
+after it was selected for review.
 They do not prove real multi-user desktop isolation, browser-process cleanup,
 filesystem power-loss durability, or live approval behavior; those remain gates.

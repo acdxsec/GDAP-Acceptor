@@ -10,6 +10,8 @@ $ErrorActionPreference = 'Stop'
 $Root = Split-Path $PSScriptRoot -Parent
 foreach ($Payload in @($WindowsPayload, $LinuxPayload)) {
     if (-not (Test-Path -LiteralPath "$Payload/scripts/Invoke-Acceptance.ps1") -or
+        -not (Test-Path -LiteralPath "$Payload/scripts/GdapInvitationBrowser.ps1") -or
+        -not (Test-Path -LiteralPath "$Payload/scripts/GdapHttpDiagnostics.ps1") -or
         -not (Test-Path -LiteralPath "$Payload/M365Internals/M365Internals.psd1") -or
         -not (Test-Path -LiteralPath "$Payload/M365Internals-LICENSE.txt")) { throw 'A complete pinned-source payload is required.' }
     if (Get-ChildItem -LiteralPath $Payload -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Payload links are not permitted.' }
@@ -101,6 +103,13 @@ $null = Element $Protocol 'RegistryValue' @{ Root='HKCU'; Key='Software\Classes\
 $null = Element $Protocol 'RegistryValue' @{ Root='HKCU'; Key='Software\Classes\gdap-acceptor'; Name='URL Protocol'; Type='string'; Value='' }
 $null = Element $Protocol 'RegistryValue' @{ Root='HKCU'; Key='Software\Classes\gdap-acceptor\shell\open\command'; Type='string'; Value='"[INSTALLDIR]gdap-acceptor.exe" "%1"' }
 $null = Element $Feature 'ComponentRef' @{ Id='Protocol' }
+$MenuRoot = Element ($Product.SelectSingleNode("./*[local-name()='Directory']")) 'Directory' @{ Id='ProgramMenuFolder' }
+$Menu = Element $MenuRoot 'Directory' @{ Id='AcceptorMenu'; Name='GDAP Acceptor' }
+$Shortcut = Element $Menu 'Component' @{ Id='StartMenuShortcut'; Guid='{C0E97BB2-8209-4D7C-B7C6-09A6B044AFAB}'; Win64='yes' }
+$null = Element $Shortcut 'Shortcut' @{ Id='LaunchAcceptor'; Name='GDAP Acceptor'; Target='[INSTALLDIR]gdap-acceptor.exe'; WorkingDirectory='INSTALLDIR' }
+$null = Element $Shortcut 'RegistryValue' @{ Root='HKCU'; Key='Software\acdxsec\GDAP Acceptor'; Name='StartMenuShortcut'; Type='integer'; Value='1'; KeyPath='yes' }
+$null = Element $Shortcut 'RemoveFolder' @{ Id='RemoveAcceptorMenu'; On='uninstall' }
+$null = Element $Feature 'ComponentRef' @{ Id='StartMenuShortcut' }
 $Source = "$OutputDirectory/gdap-acceptor-$Version.wxs"
 if (Test-Path $Source) { throw 'Refusing to overwrite existing MSI authoring.' }
 $Xml.Save($Source)

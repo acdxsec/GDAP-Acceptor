@@ -7,3 +7,5 @@ vendor/
 *.pfx
 *.key
 .env*
+**/bin/
+**/obj/

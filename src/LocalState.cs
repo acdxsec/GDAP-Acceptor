@@ -106,6 +106,22 @@ internal sealed class LocalState
         claim.Dispose();
     }
 
+    // Operator attests that the previous process is stopped and its outcome has
+    // been reviewed. The lock is necessary, but alone cannot rule out an orphaned
+    // child. Never call automatically or use this to retry an uncertain write.
+    internal void ResolveReviewed(ActiveAcceptance reviewed)
+    {
+        using var lease = Lock();
+        var active = Read<ActiveAcceptance>("active-v1.json");
+        if (active != reviewed) throw new InvalidOperationException("The reservation changed during review; nothing was cleared.");
+        using var execution = new FileStream(Path.Combine(root, "acceptance.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        Write($"reviewed-{active.Token:N}.json", new { reviewedAt = clock.GetUtcNow(), reservation = active });
+        var pending = ReadPending();
+        pending.RemoveAll(entry => entry.Invitation == active.Invitation);
+        Write("queue-v1.json", pending);
+        File.Delete(Path.Combine(root, "active-v1.json"));
+    }
+
     private List<PendingInvitation> ReadPending() => (Read<List<PendingInvitation>>("queue-v1.json") ?? new())
         .Where(entry => clock.GetUtcNow() - entry.AddedAt < TimeSpan.FromMinutes(10) && entry.AddedAt <= clock.GetUtcNow()).ToList();
 

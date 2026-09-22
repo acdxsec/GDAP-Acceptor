@@ -5,5 +5,5 @@ Priority: optional
 Architecture: amd64
 Maintainer: acdxsec <288135444+acdxsec@users.noreply.github.com>
 Depends: powershell (>= 7.6), xdg-utils
-Description: Interactive GDAP acceptance companion for custom CIPP
+Description: Interactive GDAP invitation acceptance companion
  Independently packaged acceptance launcher for authorized MSP operators.

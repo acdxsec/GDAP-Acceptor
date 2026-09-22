@@ -47,6 +47,8 @@ Assert ($Conditions.Condition -contains 'NOT ALLUSERS') 'Missing per-user guard'
 Assert ($Conditions.Condition -contains 'NOT WIX_DOWNGRADE_DETECTED') 'Missing downgrade guard'
 $Components = @(Table Component)
 Assert (-not ($Components | Where-Object { ([int]$_.Attributes -band 260) -ne 260 })) 'Every component needs a 64-bit registry key path'
+$Shortcut = @(Table Shortcut) | Where-Object Shortcut -eq LaunchAcceptor
+Assert ($Shortcut.Target -ceq '[INSTALLDIR]gdap-acceptor.exe' -and $Shortcut.WkDir -eq 'INSTALLDIR' -and $Shortcut.Directory_ -eq 'AcceptorMenu') 'Missing standalone Start Menu launcher'
 $Contents = & dpkg-deb --contents $Deb
 Assert ($LASTEXITCODE -eq 0) 'Debian metadata extraction failed'
 Assert (-not ($Contents | Where-Object { $_ -notmatch '^[-d][rwx-]{9}\s+root/root\s' })) 'Debian package has unexpected ownership, modes or links'
@@ -60,4 +62,8 @@ Assert (-not (Get-ChildItem "$Temp/control" | Where-Object Name -in @('preinst',
 & "$Temp/payload/opt/gdap-acceptor/gdap-acceptor" self-test
 Assert ($LASTEXITCODE -eq 0) 'Packaged Linux native self-test failed'
 Assert (Test-Path "$Temp/payload/opt/gdap-acceptor/M365Internals-LICENSE.txt") 'Bundled attribution missing'
+$Desktop = Get-Content "$Temp/payload/usr/share/applications/gdap-acceptor.desktop" -Raw
+Assert ($Desktop -match '(?m)^NoDisplay=false$' -and $Desktop -match '(?m)^Terminal=true$' -and $Desktop -match '(?m)^Exec=/opt/gdap-acceptor/gdap-acceptor %u$') 'Linux launcher must be visible and open a terminal'
+Assert (Test-Path "$Temp/payload/opt/gdap-acceptor/scripts/GdapInvitationBrowser.ps1") 'Bundled invitation browser helper missing'
+Assert (Test-Path "$Temp/payload/opt/gdap-acceptor/scripts/GdapHttpDiagnostics.ps1") 'Bundled HTTP diagnostics helper missing'
 Write-Output "PASS: unsigned MSI metadata and extracted Debian payload; no system installation. Inspection files: $Temp"
