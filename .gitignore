@@ -1,7 +1,11 @@
 src/bin/
 src/obj/
+tests/StateContracts/bin/
+tests/StateContracts/obj/
 dist/
 vendor/
 *.pfx
 *.key
 .env*
+**/bin/
+**/obj/

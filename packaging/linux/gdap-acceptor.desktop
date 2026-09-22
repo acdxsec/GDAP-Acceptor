@@ -5,4 +5,6 @@ Exec=/opt/gdap-acceptor/gdap-acceptor %u
 TryExec=/opt/gdap-acceptor/gdap-acceptor
 Terminal=true
 MimeType=x-scheme-handler/gdap-acceptor;
-NoDisplay=true
+Categories=Utility;
+Comment=Paste a Microsoft GDAP invitation and accept it in the customer tenant
+NoDisplay=false
