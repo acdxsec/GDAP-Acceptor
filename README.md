@@ -4,11 +4,17 @@ Standalone Windows/Linux launcher for an MSP operator accepting a Microsoft GDAP
 invitation created by **unmodified CIPP**. No CIPP custom page, custom image,
 custom API, or locally installed M365Internals checkout is needed.
 
+Download the [unsigned 0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5)
+for Windows/Linux installers, portable packages, checksums and installation instructions.
+
 Development package **0.1.5** includes the Windows browser process-handoff fix:
 an exited launch process no longer stops sign-in while its private browser session
 is still responding. The user completed a Windows interactive dry run with this
 fix, including customer selection and invitation validation. No approval was
 submitted by that test.
+After receiving the normal 0.1.5 Windows launcher/installer, the user also reported
+that it worked. This is operator-reported Windows launcher evidence, not a separate
+confirmation of final CIPP onboarding completion or every installer launch path.
 
 ## Run
 
@@ -127,9 +133,12 @@ Start Menu shortcut; Linux exposes an application-menu entry. No installer chang
 CIPP or enrolls customer credentials. Runtime/browser prerequisites are not
 silently installed.
 
-**These are development builds, not signed production releases.** Linux has
-operator-reported live launcher, acceptance and CIPP handoff evidence. Windows
-sign-in, customer selection and invitation inspection passed an interactive dry
-run; normal Windows launcher approval and Start Menu use still need target-desktop
-validation. See
+**These are development builds, not signed production releases.** Windows and
+Linux now have operator-reported normal-launcher success. Windows also has detailed
+interactive dry-run evidence; Linux has acceptance and CIPP handoff evidence.
+The unsigned prerelease is published. Production signing and the remaining
+desktop-policy checks are not complete.
+Paid signing was declined; continue with the unsigned builds. See
+[unsigned distribution](docs/UNSIGNED-DISTRIBUTION.md),
+[optional future signing](docs/SIGNING-READINESS.md) and
 [release gates](docs/RELEASE-GATES.md).

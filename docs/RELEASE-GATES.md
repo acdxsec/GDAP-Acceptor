@@ -1,5 +1,17 @@
 # Release gates and known limitations
 
+## Current distribution decision
+
+Continue with unsigned development builds; the user declined paid signing.
+The user separately approved the public
+[0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5),
+published from tested source `1412f99c29ee640e0d1e84d7172f923f5a516125`.
+No signing subscription, automatic updater or APT repository was created.
+Existing desktop policies still apply.
+Windows and Linux 0.1.5 artifacts come from the same tested source tree. Signing
+items below describe future production-release work, not a requirement to keep
+using the working unsigned tool. See [unsigned distribution](UNSIGNED-DISTRIBUTION.md).
+
 ## Live evidence already obtained
 
 On September 18, 2026, the user's Linux PowerShell acceptance run was followed by
@@ -28,6 +40,11 @@ confirmed an exited launch process with a still-live private browser session.
 This validates the process-handoff fix on that desktop. No approval was submitted;
 the normal Windows launcher and installed Start Menu path remain separate checks.
 
+After receiving the normal Windows 0.1.5 launcher and installer, the user reported
+"ok that worked". This establishes operator-reported success for the normal
+Windows workflow. It does not distinguish installer/Start Menu use from portable
+launch, nor separately establish final CIPP onboarding completion.
+
 ## Existing Windows CI evidence
 
 [GitHub Actions run 34390399881](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/34390399881)
@@ -45,9 +62,17 @@ checks, 50 acceptance scenarios, wrapper subprocess checks, isolated Windows
 Edge navigation and unsigned packaging. MSI lifecycle checks cover per-user
 installation, collision/context guards, installed CLI/wrapper and Start Menu
 metadata, repair, upgrade/downgrade, uninstall and enrollment/reservation retention.
-These were disposable-runner checks, not live Microsoft authentication. The
-0.1.5 packaging revision requires its own CI run before distribution; the upgrade
-package 0.1.6 is a test fixture, not a release.
+These were disposable-runner checks, not live Microsoft authentication.
+
+The distributed 0.1.5 artifacts passed all four jobs in
+[run 35758177011](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/35758177011).
+Source head `1412f99c29ee640e0d1e84d7172f923f5a516125` and PR merge build commit
+`ba23c02b89dc58e7658369b158868aa8e5ed1eb3` have the same source tree. All 315
+extracted MSI files were hash-compared to the tested portable Windows payload.
+The CI-only 0.1.6 upgrade package is a test fixture, not a release.
+The parallel push run initially timed out acquiring a state lock during concurrent
+enrollment; its unchanged retry passed all jobs. The locking safeguards were not
+weakened, and the timing cause is not proven.
 
 The bundled approval adapter now includes the tested browser-navigation flow,
 the observed portal response contract, live tenant validation, User-Agent fixes
@@ -68,12 +93,10 @@ not used to change the invitation's terms.
   final redirects. The user's subsequent run passed targeted sign-in and live
   identity checks after they corrected the supplied customer ID. This fixes a
   reproduced targeting gap, not proof that every reported mismatch has that cause.
-- Exercise the new paste-in launcher and explicit authenticated-customer choice
-  on Windows 11. Windows customer selection and invitation inspection now have
-  live dry-run evidence, but not normal native-launcher approval evidence. The user
-  reports the normal launcher works on their Linux workstation. Offline contracts cover the selection path,
-  cancellation, partner-account rejection and tenant changes; they are not
-  live browser/MFA tests.
+- Normal-launcher success is operator-reported on both Windows and Linux. Windows
+  customer selection and invitation inspection also have detailed live dry-run
+  evidence. Offline contracts cover cancellation, partner-account rejection and
+  tenant changes; they do not prove every live browser/MFA or policy variant.
 - Test passkeys, PIM, Conditional Access and browser-management policies in
   authorized customer/partner environments.
 - Confirm application-menu/Start Menu launch, temporary-profile cleanup on crash,
