@@ -4,11 +4,11 @@
 
 Continue with unsigned development builds; the user declined paid signing.
 The user separately approved the public
-[0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5),
-published from tested source `1412f99c29ee640e0d1e84d7172f923f5a516125`.
+[0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6),
+published from tested source `7938ce0a99f0511371c398eb98caad09abf68be6`.
 No signing subscription, automatic updater or APT repository was created.
 Existing desktop policies still apply.
-Windows and Linux 0.1.5 artifacts come from the same tested source tree. Signing
+Windows and Linux 0.1.6 artifacts come from the same tested source tree. Signing
 items below describe future production-release work, not a requirement to keep
 using the working unsigned tool. See [unsigned distribution](UNSIGNED-DISTRIBUTION.md).
 
@@ -82,6 +82,9 @@ not used to change the invitation's terms.
 ## 0.1.6 outcome-review correction
 
 Source/build 0.1.6 implements [issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2).
+Its published packages are the unchanged tested artifacts from
+[run 35862592526](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/35862592526),
+which passed all four Windows/Linux verification, packaging and installer jobs.
 Uncertain/post-submission outcomes and abnormal child exits retain the local
 reservation until explicit review. The wrapper distinguishes these from known
 preflight cancellation and verified active success. Tests use real approval and

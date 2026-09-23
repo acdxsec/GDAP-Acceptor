@@ -4,10 +4,10 @@ Standalone Windows/Linux launcher for an MSP operator accepting a Microsoft GDAP
 invitation created by **unmodified CIPP**. No CIPP custom page, custom image,
 custom API, or locally installed M365Internals checkout is needed.
 
-Download the [unsigned 0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5)
+Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
-Source/build version **0.1.6** preserves the local reservation after uncertain
+Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,
 inspect the relationship in Microsoft/CIPP and run `gdap-acceptor queue resolve`.
 Known preflight cancellation and verified active results still clear the reservation.

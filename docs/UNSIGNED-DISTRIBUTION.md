@@ -1,7 +1,7 @@
 # Unsigned development distribution
 
 The user chose not to purchase a signing service. The current working baseline
-is 0.1.5, with matching Windows and Linux source. These are unsigned development
+is 0.1.6, with matching Windows and Linux source. These are unsigned development
 packages, not a claim of production signing or certification. CIPP remains
 unmodified; the companion does not manage CIPP's queue.
 
@@ -9,8 +9,8 @@ unmodified; the companion does not manage CIPP's queue.
 
 | Desktop | Installer | Portable alternative |
 | --- | --- | --- |
-| Windows x64 | `gdap-acceptor-0.1.5-x64.msi` | `gdap-acceptor-0.1.5-win-x64.zip` |
-| Linux x64, Debian/Ubuntu family | `gdap-acceptor_0.1.5_amd64.deb` | `gdap-acceptor-0.1.5-linux-x64.tar.gz` |
+| Windows x64 | `gdap-acceptor-0.1.6-x64.msi` | `gdap-acceptor-0.1.6-win-x64.zip` |
+| Linux x64, Debian/Ubuntu family | `gdap-acceptor_0.1.6_amd64.deb` | `gdap-acceptor-0.1.6-linux-x64.tar.gz` |
 
 PowerShell 7.6+ and an installed Edge, Chrome or Chromium browser are prerequisites.
 A graphical desktop is required. The .NET runtime and reviewed M365Internals module
@@ -22,7 +22,7 @@ into a fresh folder and open `gdap-acceptor.exe`.
 On Linux, from the folder containing the Debian package:
 
 ```bash
-sudo apt install ./gdap-acceptor_0.1.5_amd64.deb
+sudo apt install ./gdap-acceptor_0.1.6_amd64.deb
 ```
 
 Then open GDAP Acceptor from the application menu. Run the launcher as your normal
@@ -45,7 +45,8 @@ This is the normal approval-capable workflow, not a dry-run helper.
 Stop the existing launcher and its private browser session before changing its
 files. Install a higher-version package or extract a new portable version into a
 separate directory; do not mix old and new runtime or script files. Do not install
-the CI-only 0.1.6 upgrade fixture. Keep the prior working portable folder until
+the CI-only 0.1.7 upgrade fixture (or the older 0.1.6 fixture from 0.1.5 CI).
+Use the packages attached to the published release. Keep the prior working portable folder until
 the new one has been checked. No silent updater or dependency download is enabled.
 
 Enrollment and queue state live outside the program folder under your user
@@ -56,15 +57,17 @@ need another approval.
 
 ## Verification and provenance
 
-The 0.1.5 source head is `1412f99c29ee640e0d1e84d7172f923f5a516125`.
-[CI run 35758177011](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/35758177011)
-used merge commit `ba23c02b89dc58e7658369b158868aa8e5ed1eb3` with the same
-source tree and passed Windows/Linux verification, packaging and Windows installer
-lifecycle checks. Later documentation edits do not alter those binaries.
+The 0.1.6 source head and tag target is `7938ce0a99f0511371c398eb98caad09abf68be6`.
+[CI run 35862592526](https://github.com/acdxsec/GDAP-Acceptor/actions/runs/35862592526)
+built that exact commit and passed Windows/Linux verification, packaging and
+Windows installer lifecycle checks. The release uses those tested artifacts,
+not a rebuild. Later documentation edits do not alter those binaries.
 
 The handoff directory supplies `SHA256SUMS`. Compare the exact file against its
 recorded hash before installation. A checksum detects corruption or a mismatch;
 an unsigned checksum file is not publisher authentication. The user subsequently
-approved the public [v0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5),
+approved the public [v0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6),
 which contains these exact packages and a release-specific checksum manifest.
-No APT repository or paid signing service was created.
+No APT repository or paid signing service was created. The prior v0.1.5 tag and
+release assets remain unchanged. Version 0.1.6 retains reservations after uncertain
+approval outcomes; explicit outcome review is required before `queue resolve`.
