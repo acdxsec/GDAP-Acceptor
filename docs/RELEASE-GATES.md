@@ -100,9 +100,27 @@ queue/recovery, trusted connections and diagnostic export. The existing approval
 path now prints separate access-review fields and role IDs. All consent and
 identity checks remain in place; uncertain outcomes still retain their reservation.
 See [operator workspace](OPERATOR-WORKSPACE.md) for scope and acceptance criteria.
-The current workflow's 0.2.1 installer is an upgrade-test fixture, not a release.
+That workflow's 0.2.1 installer was an upgrade-test fixture, not a release.
 The published 0.1.6 assets are unchanged. New Windows/Linux CI and desktop evidence
 must be distinguished from the historical acceptance evidence above.
+
+The user subsequently reported that the new menu appears to work. This is
+operator-reported menu evidence, not validation of the later CIPP connector.
+
+## 0.3.0 read-only onboarding-status connector
+
+Development source adds dedicated API-client configuration, OS-vault storage,
+exact-relationship status reads and a bounded watch after verified acceptance.
+It does not change CIPP or submit onboarding tasks. A status error or cancelled
+watch cannot change a successful acceptance or retain its reservation.
+See [CIPP status](CIPP-STATUS.md) for the operator setup and detailed constraints.
+Native launcher tests cover the connector with synthetic HTTP and vault adapters;
+Windows CI also round-trips an isolated synthetic credential through Credential
+Manager. Live API configuration/permissions/response validation remains outstanding.
+Linux's real desktop Secret Service integration also remains a desktop check;
+there is no plaintext fallback when it is unavailable. The current workflow's
+0.3.1 installer is an upgrade-test fixture, not a release. Published assets remain
+unchanged; new development packages must be identified separately.
 
 ## Remaining gates
 
@@ -161,9 +179,11 @@ report and do not replace Windows desktop testing.
 
 ## Scope and identity
 
-No CIPP modification is required. The launcher opens the stock onboarding page,
-does not call a custom callback or manually enqueue onboarding, and does not claim
-to verify CIPP success. CIPP owns onward tasks, delays and failure logs.
+No CIPP source modification is required. The launcher opens the stock onboarding
+page and does not call a custom callback or manually enqueue onboarding. Version
+0.3.0 can independently report CIPP's recorded status after API-client configuration;
+approval alone is never evidence of CIPP success. CIPP owns onward tasks, delays
+and failure logs.
 
 The expected partner is enrolled independently of the invitation. The launcher
 selects the customer from a freshly validated live portal session, explicitly

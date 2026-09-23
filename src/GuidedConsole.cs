@@ -17,6 +17,7 @@ internal static class GuidedConsole
             Console.WriteLine("2. Queue and recovery");
             Console.WriteLine("3. CIPP connection settings");
             Console.WriteLine("4. Export diagnostics");
+            Console.WriteLine("5. Check CIPP onboarding");
             Console.WriteLine("0. Exit");
             Console.Write("Choose an action (or paste a Microsoft invitation): ");
             var choice = Console.ReadLine()?.Trim();
@@ -68,9 +69,12 @@ internal static class GuidedConsole
                     foreach (var item in instances.OrderBy(pair => pair.Key))
                         Console.WriteLine($"{Text(item.Value.BaseUrl)} | Partner: {Text(item.Value.PartnerTenantId)}");
                     Console.WriteLine("These settings do not configure CIPP Automated Onboarding or store customer credentials.");
-                    Console.Write("A. Add a trusted CIPP connection | Enter to return: ");
-                    if (string.Equals(Console.ReadLine()?.Trim(), "a", StringComparison.OrdinalIgnoreCase))
-                        lastCode = await execute(["configure"]);
+                    Console.WriteLine("A. Add a trusted CIPP origin | C. Configure read-only API access | D. Disconnect local API credential");
+                    Console.Write("Choose a settings action, or Enter to return: ");
+                    var setting = Console.ReadLine()?.Trim().ToLowerInvariant();
+                    if (setting == "a") lastCode = await execute(["configure"]);
+                    else if (setting == "c") lastCode = await execute(["cipp", "configure"]);
+                    else if (setting == "d") lastCode = await execute(["cipp", "disconnect"]);
                     lastAction = "Settings finished. No customer authentication was started.";
                 }
                 catch
@@ -90,6 +94,18 @@ internal static class GuidedConsole
                     ? "Diagnostics exported. Review identifiers before sharing the file."
                     : "Export did not complete. Check the destination and choose a new file path.";
             }
+            else if (choice == "5")
+            {
+                Console.WriteLine("CIPP ONBOARDING | Read-only; no customer sign-in, approval or job submission");
+                Console.Write("Paste the Microsoft invitation URL to match (blank to return): ");
+                var invitation = Console.ReadLine()?.Trim();
+                if (string.IsNullOrEmpty(invitation)) continue;
+                Console.Write("Enter to check once, W to watch for start (up to 20 minutes), or anything else to cancel: ");
+                var action = Console.ReadLine()?.Trim().ToLowerInvariant();
+                if (action is not ("" or "w")) continue;
+                lastCode = await execute(["cipp", action == "w" ? "watch" : "status", invitation]);
+                lastAction = "CIPP status check finished. GDAP access was not changed. See the result above.";
+            }
             else if (choice.StartsWith("https://", StringComparison.Ordinal))
                 await AcceptInvitation(choice);
             else lastAction = "Select a listed action or paste a full Microsoft invitation URL.";
@@ -103,7 +119,7 @@ internal static class GuidedConsole
             catch (ArgumentException error) { lastCode = 2; lastAction = error.Message; return; }
             lastCode = await execute([invitation]);
             lastAction = lastCode == 0
-                ? "GDAP active. CIPP onboarding has NOT been verified here."
+                ? "GDAP active. See the separate CIPP status result above. Do not repeat approval."
                 : "Acceptance not confirmed. Inspect Queue and recovery before retrying.";
         }
     }

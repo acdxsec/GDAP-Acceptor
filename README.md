@@ -7,9 +7,9 @@ custom API, or locally installed M365Internals checkout is needed.
 Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
-Development version **0.2.0** adds a guided terminal workspace. It is not included
-in the published 0.1.6 download. See [operator workspace](docs/OPERATOR-WORKSPACE.md)
-for the implemented interface and the remaining authenticated CIPP-status work.
+Development version **0.3.0** adds a read-only CIPP onboarding-status connector
+to the guided terminal workspace introduced in 0.2.0. It is not included in the
+published 0.1.6 download. See [CIPP connection setup](docs/CIPP-STATUS.md).
 
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,
@@ -54,12 +54,24 @@ executable, or run the executable from its extracted package:
 5. The launcher opens CIPP's normal GDAP Onboarding page in your default browser.
    Existing CIPP Automated Onboarding handles the Microsoft approval event.
    **Active GDAP is not a claim that CIPP onboarding started or completed.**
+6. If API access is configured, the companion watches the exact relationship's
+   CIPP record for up to 20 minutes. Queued is reported separately from running.
+   Ctrl+C stops only the status watch; CIPP continues independently. A failed
+   status check never changes a successful GDAP approval or submits another job.
 
 After the action, the workspace returns to its home menu. Choose **2** to inspect
 the local queue and explicitly review an interrupted reservation, **3** to view
 or add trusted CIPP connections, **4** to export local diagnostics to a new file,
-or **0** to exit. These actions do not authenticate to a customer or start CIPP
-onboarding. Approval and CUSTOMER confirmation remain in this same terminal.
+**5** to check/watch CIPP onboarding without repeating acceptance, or **0** to
+exit. In settings, **C** configures the dedicated read-only API credential and
+**D** disconnects it locally. These actions do not authenticate to a customer or
+start CIPP onboarding. Approval and CUSTOMER confirmation remain in this terminal.
+
+API credentials are entered only at a hidden terminal prompt, verified with an
+OAuth request and the fixed onboarding-list GET, then stored in the OS credential
+vault. They are not saved in JSON settings, package files or diagnostics. CIPP's
+API client and least-privileged role must first be configured by an administrator;
+see [one-time setup, vault requirements and limitations](docs/CIPP-STATUS.md).
 
 You can also pass the full URL as a single quoted command-line argument.
 Cancellation or a tenant change stops approval. Authentication uses an isolated
