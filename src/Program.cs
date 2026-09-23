@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 var result = await Acceptor.Run(args);
-if ((args.Length == 0 || (args.Length == 1 && args[0].StartsWith("gdap-acceptor://", StringComparison.Ordinal))) && !Console.IsInputRedirected)
+if ((args.Length == 1 && args[0].StartsWith("gdap-acceptor://", StringComparison.Ordinal)) && !Console.IsInputRedirected)
 {
     Console.WriteLine("Press Enter to close this window.");
     Console.ReadLine();
@@ -93,10 +93,11 @@ internal static class Acceptor
             if (args.SequenceEqual(new[] { "--help" }) || args.SequenceEqual(new[] { "-h" }))
             {
                 Console.WriteLine("gdap-acceptor [<Microsoft-invitation-url>] | configure | queue status | queue resolve | diagnostics export <new-file> | self-test");
-                Console.WriteLine("With no arguments: paste an invitation. First use prompts for your CIPP URL and partner tenant ID. Customer identity is confirmed after fresh browser sign-in.");
+                Console.WriteLine("With no arguments: open the guided workspace for acceptance, queue/recovery, settings and diagnostics. You can still paste an invitation at its home prompt. Customer identity is confirmed after fresh browser sign-in.");
                 return 0;
             }
             var local = new LocalState(stateDirectory);
+            if (args.Length == 0) return await GuidedConsole.Run(local, command => Run(command, stateDirectory, accept));
             if (args.SequenceEqual(new[] { "configure" })) { Configure(local); return 0; }
             if (args.SequenceEqual(new[] { "queue", "status" }))
             {
@@ -147,13 +148,7 @@ internal static class Acceptor
                 return 0;
             }
             if (args.Length > 1) { Console.WriteLine("Run gdap-acceptor --help for usage."); return 2; }
-            var pastedInput = args.Length == 1 ? args[0] : null;
-            if (pastedInput is null)
-            {
-                Console.WriteLine("GDAP Acceptor — Microsoft invitation to CIPP automated onboarding");
-                Console.Write("Paste the GDAP invitation URL from CIPP: ");
-                pastedInput = Console.ReadLine() ?? "";
-            }
+            var pastedInput = args[0];
             Invitation invitation;
             if (pastedInput.StartsWith("gdap-acceptor://", StringComparison.Ordinal)) invitation = ParseInvitation(pastedInput);
             else
@@ -203,6 +198,7 @@ internal static class Acceptor
         var baseUrl = ValidateBaseUrl(instance.BaseUrl);
         var partner = Guid.ParseExact(instance.PartnerTenantId, "D");
         if (partner == Guid.Empty) throw new ArgumentException("Invalid enrolled partner.");
+        Console.WriteLine("ACCEPT INVITATION | Step 2 of 4: sign in and confirm the customer");
         Console.WriteLine($"CIPP: {baseUrl}\nPartner tenant: {partner}\nRelationship: {invitation.RelationshipId}");
         Console.WriteLine("Sign in as the CUSTOMER administrator in the fresh private browser. Confirm the customer tenant in this terminal before the invitation opens.");
         var fallback = $"https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/{Uri.EscapeDataString(invitation.RelationshipId)}";
@@ -227,6 +223,7 @@ internal static class Acceptor
         catch (IOException) { Console.WriteLine("Could not save local diagnostics. The acceptance result below is unchanged."); }
         catch (UnauthorizedAccessException) { Console.WriteLine("Could not save local diagnostics. The acceptance result below is unchanged."); }
         if (outcome != AcceptanceOutcome.Active) { Console.WriteLine("Acceptance not confirmed. Inspect the Microsoft relationship outcome before any further action."); return outcome; }
+        Console.WriteLine("ACCEPT INVITATION | Step 4 of 4: return to CIPP");
         Console.WriteLine("GDAP relationship is ACTIVE. CIPP onboarding is NOT verified by this launcher.");
         Console.WriteLine("Existing CIPP Automated Onboarding processes Microsoft's approval event on its schedule; Microsoft propagation can add a further delay. Do not approve again.");
         var returnUrl = OnboardingUrl(instance);

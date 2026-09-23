@@ -7,6 +7,10 @@ custom API, or locally installed M365Internals checkout is needed.
 Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
+Development version **0.2.0** adds a guided terminal workspace. It is not included
+in the published 0.1.6 download. See [operator workspace](docs/OPERATOR-WORKSPACE.md)
+for the implemented interface and the remaining authenticated CIPP-status work.
+
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,
 inspect the relationship in Microsoft/CIPP and run `gdap-acceptor queue resolve`.
@@ -35,7 +39,8 @@ executable, or run the executable from its extracted package:
 ./gdap-acceptor
 ```
 
-1. Paste the full Microsoft invitation URL copied from CIPP.
+1. Choose **1. Accept invitation**, then paste the full Microsoft invitation URL
+   copied from CIPP. Direct pasting at the home prompt is also supported.
 2. On first use, enter your CIPP HTTPS origin and **partner** tenant ID and type
    TRUST to save them locally. This is not a CIPP instance ID or API credential.
    Use `gdap-acceptor configure` to enroll another origin/partner later.
@@ -49,6 +54,12 @@ executable, or run the executable from its extracted package:
 5. The launcher opens CIPP's normal GDAP Onboarding page in your default browser.
    Existing CIPP Automated Onboarding handles the Microsoft approval event.
    **Active GDAP is not a claim that CIPP onboarding started or completed.**
+
+After the action, the workspace returns to its home menu. Choose **2** to inspect
+the local queue and explicitly review an interrupted reservation, **3** to view
+or add trusted CIPP connections, **4** to export local diagnostics to a new file,
+or **0** to exit. These actions do not authenticate to a customer or start CIPP
+onboarding. Approval and CUSTOMER confirmation remain in this same terminal.
 
 You can also pass the full URL as a single quoted command-line argument.
 Cancellation or a tenant change stops approval. Authentication uses an isolated

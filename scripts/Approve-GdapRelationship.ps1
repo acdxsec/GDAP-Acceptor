@@ -281,6 +281,15 @@ function Assert-GdapEvidence {
         ETag = [string](Get-GdapField $relationship 'etag')
         Consent = [string]$portalShape + '|' + ($roleIds -join ',') + '|' + $duration + '|' + $extension
         Summary = "Customer tenant: $Tenant; partner tenant: $Partner; relationship: $Id; roles: $($roleIds -join ', '); duration: $durationDisplay; extension: $extension"
+        DisplayLines = @(
+            "Customer tenant: $Tenant"
+            "Partner tenant: $Partner"
+            "Relationship: $Id"
+            "Duration: $durationDisplay"
+            "Automatic extension: $extension"
+            "Requested roles ($($roleIds.Count)):"
+            $roleIds | ForEach-Object { "  $_" }
+        )
     }
 }
 function Approve-GdapRelationship {
@@ -301,7 +310,9 @@ function Approve-GdapRelationship {
     Write-Host "Microsoft invitation: https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/$id"
     $invitation = & $Request @{ Path = $path; Method = 'Get' }
     $evidence = Assert-GdapEvidence $invitation $id $ExpectedTenantId $ExpectedPartnerTenantId (& $GetSession)
-    Write-Host (ConvertTo-GdapDisplayText ("Validated invitation: " + $evidence.Summary + '; status: ' + $evidence.Status))
+    Write-Host 'ACCEPT INVITATION | Step 3 of 4: review requested access'
+    foreach ($line in $evidence.DisplayLines) { Write-Host (ConvertTo-GdapDisplayText $line) }
+    Write-Host (ConvertTo-GdapDisplayText ("Status: " + $evidence.Status))
     if ($evidence.Status -eq 'active') { return $invitation }
     if ($evidence.Status -notin @('approvalPending', 'approved', 'activating')) { throw 'The relationship is not in an approvable or activating state.' }
     if ($evidence.Status -in @('approved', 'activating')) { $OutcomeState.RequiresReview = $true }
@@ -332,6 +343,7 @@ function Approve-GdapRelationship {
         } elseif ($checked.Status -notin @('approved', 'activating')) { throw 'Relationship state changed during confirmation; approval stopped.' }
     }
     $timer = [Diagnostics.Stopwatch]::StartNew()
+    Write-Host 'Waiting for Microsoft to report this relationship active. Approval will not be resubmitted.'
     do {
         $result = & $Request @{ Path = $path; Method = 'Get' }
         $observed = Assert-GdapEvidence $result $id $ExpectedTenantId $ExpectedPartnerTenantId (& $GetSession)
