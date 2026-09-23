@@ -20,15 +20,35 @@ No test invokes authentication or supplies a production-state override to the CL
 - Active acceptance has a durable reservation and an OS execution lock. Active
   work never expires with pending work. Disposing a handle or killing the launcher
   does not clear the reservation: a child PowerShell/browser may still be running.
-- Normal completion (preflight stopped or child exited) clears the exact matching
-  reservation. Exceptions leave it for review. Explicit `queue resolve` archives
+- Only a known preflight stop/cancellation or a verified active result clears the
+  exact matching reservation. An uncertain/post-submission result, unexpected
+  child exit or native exception leaves it for review. Explicit `queue resolve` archives
   reviewed interrupted work; it never authenticates or replays the invitation.
   There is no automatic expiry of active work or automatic approval retry.
 
-## Known handled-error limitation (0.1.5)
+## Approval outcome protocol (0.1.6)
+
+The wrapper returns exit **0** for verified active, **2** for known preflight
+failure/cancellation, and **3** for an uncertain or post-submission outcome.
+The native launcher treats every other child exit as requiring review too.
+A normal process exit alone is not evidence that no approval was submitted.
+
+The in-process `OutcomeState.RequiresReview` flag is set before dispatching a
+POST, or when observing an already approved/activating relationship. The same
+object is carried through the browser continuation and module scopes. It stays
+set through readback and cleanup, even if a later exception replaces the original
+error. Only a successfully returned active result permits wrapper exit 0. The
+flag contains no tokens, cookies or raw portal responses; exceptions are not
+serialized or parsed for classification.
+
+Uncertain outcomes retain the existing durable reservation. Another launch is
+refused before authentication until explicit outcome review with `queue resolve`.
+Resolution archives local state; it does not retry approval or start onboarding.
+
+## Historical handled-error limitation (0.1.5)
 
 A PowerShell child that catches an approval error and exits normally with a
-nonzero exit code currently clears its reservation, including when a submitted
+nonzero exit code clears its reservation in 0.1.5, including when a submitted
 approval has an unknown outcome. Its generic error output also loses the specific
 unknown-outcome classification. Consequently an empty queue is not proof that no
 approval was submitted, and another explicit launch is not forced through
@@ -37,7 +57,7 @@ customer/partner/access/state and requires applicable confirmation.
 
 After **any approval error**, inspect the Microsoft relationship outcome before
 launching the invitation again, even if the queue is empty. Preserving a distinct
-uncertain outcome across the wrapper/native boundary is tracked in
+uncertain outcome across the wrapper/native boundary is implemented in 0.1.6 for
 [issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2). Process-death and
 unhandled native-exception reservations remain protected as described above.
 
@@ -82,5 +102,11 @@ The tests create isolated temporary directories and report their location.
 `tests/LauncherContracts` also covers recovery cancellation, archival without
 replay, refusal while the execution lock is held, and a reservation changing
 after it was selected for review.
+It runs the real approval core and wrapper in PowerShell subprocesses against
+synthetic portal responses: POST timeout, failed/mismatched readback, activation
+timeout, cleanup failure, already approved/activating, abnormal child exit,
+known preflight failure/cancellation and verified success. It checks queue status,
+refusal before authentication, cancelled review and explicit resolution without
+replay on both CI operating systems. Production has no test payload override.
 They do not prove real multi-user desktop isolation, browser-process cleanup,
 filesystem power-loss durability, or live approval behavior; those remain gates.

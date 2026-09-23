@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'ExpectedCustomer')][guid]$ExpectedTenantId,
     [Parameter(Mandatory, ParameterSetName = 'AuthenticatedCustomer')][switch]$ConfirmAuthenticatedTenant,
     [Parameter(Mandatory)][guid]$ExpectedPartnerTenantId,
-    [switch]$PortalRequestDiagnostics
+    [switch]$PortalRequestDiagnostics,
+    [System.Collections.IDictionary]$OutcomeState
 )
 if ($RelationshipId -cne 'synthetic-invitation' -or $ExpectedPartnerTenantId -ne [guid]'22222222-2222-2222-2222-222222222222') { throw 'Forwarded identities changed' }
 if (-not $PSBoundParameters['Confirm'] -or $WhatIfPreference -or -not $PortalRequestDiagnostics) { throw 'Approval confirmation or diagnostics policy changed' }

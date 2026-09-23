@@ -27,7 +27,7 @@ foreach ($mode in @('Discovery', 'Explicit')) {
             $stderr = $process.StandardError.ReadToEndAsync()
             if (-not $process.WaitForExit(30000)) { $process.Kill($true); throw 'Isolated wrapper check timed out' }
             $output = $stdout.GetAwaiter().GetResult() + $stderr.GetAwaiter().GetResult()
-            $expected = if ($scenario -eq 'active') { 0 } elseif ($scenario -eq 'error') { 1 } else { 2 }
+            $expected = if ($scenario -eq 'active') { 0 } elseif ($scenario -in @('error', 'empty')) { 2 } else { 3 }
             if ($process.ExitCode -ne $expected -or $output -notmatch 'STUB: validated') { throw "Wrapper contract failed: $mode/$scenario exit=$($process.ExitCode). $output" }
             if ($output.Contains('SYNTHETIC_SECRET_MUST_NOT_APPEAR')) { throw 'Raw approval exception leaked' }
             $count++

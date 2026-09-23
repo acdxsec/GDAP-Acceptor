@@ -207,6 +207,8 @@ if (-not $probe.Launched -or -not $probe.Stopped -or [IO.Directory]::Exists($pro
     }
 }
 if ($LiveTenantScenario -eq 'WrongExpected') { $arguments.ExpectedTenantId = '22222222-2222-2222-2222-222222222222' }
+$outcome = @{ RequiresReview = $false }
+$arguments.OutcomeState = $outcome
 $diagnostic = $null
 try { $null = & $ApprovalScript @arguments } catch {
     if (-not $RequireApprovalConfirmation -and $LiveTenantScenario -in @('Match', 'ShellFallback') -and $InvitationScenario -in @('Ready', 'CompetingTab', 'CdpNoise', 'ProcessHandoff') -and (-not $DiscoverCustomer -or $CustomerSelection -eq 'Accept')) { throw }
@@ -244,6 +246,7 @@ if (-not $stoppedBeforeInspection -and ($probe.IdentityReads -lt 1 -or $probe.Id
 $expectedReads = if ($stoppedBeforeInspection) { 0 } elseif ($SubmitSyntheticApproval) { 3 } else { 1 }
 $expectedPosts = if ($SubmitSyntheticApproval -and -not $stoppedBeforeInspection) { 1 } else { 0 }
 if ($probe.Reads -ne $expectedReads -or $probe.Posts -ne $expectedPosts) { throw 'Unsafe invitation inspection or approval write' }
+if ([bool]$outcome.RequiresReview -ne ($expectedPosts -gt 0)) { throw 'Approval outcome was lost across entry-point/module/browser scopes' }
 if ($LiveTenantScenario -eq 'WrongExpected' -and $probe.Navigations -ne 0) { throw 'Invitation opened in the wrong expected tenant' }
 if (-not $probe.Stopped -or [IO.Directory]::Exists($probe.Profile)) { throw 'Retained browser cleanup failed' }
 if (-not $WhatIfPreference) { throw 'Script changed caller WhatIf preference' }
