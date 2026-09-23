@@ -20,7 +20,7 @@ try
         var start = Acceptor.AcceptanceCommand("/path with spaces/pwsh", "/payload with spaces/scripts/Invoke-Acceptance.ps1", invitation, instance);
         Assert(!start.UseShellExecute && start.FileName == "/path with spaces/pwsh", "Shell interpolation enabled");
         Assert(start.ArgumentList.SequenceEqual(new[] { "-NoLogo", "-NoProfile", "-File", "/payload with spaces/scripts/Invoke-Acceptance.ps1", "-RelationshipId", relationship, "-ConfirmAuthenticatedTenant", "-ExpectedPartnerTenantId", partner }), "Launcher did not request confirmed customer discovery with the enrolled partner");
-        return Task.FromResult(true);
+        return Task.FromResult(AcceptanceOutcome.Active);
     });
     Assert(result.Code == 0 && calls == 1 && result.Output.Contains("Saved locally"), "First use did not enroll and accept exactly once");
     Assert(new LocalState(first).Active() is null && new LocalState(first).Pending().Count == 0, "Successful child did not release its reservation");
@@ -29,10 +29,63 @@ try
     result = await Run(first, [], url + "\n", (_, instance) =>
     {
         Assert(instance == trusted, "Saved partner was not reused");
-        return Task.FromResult(false);
+        return Task.FromResult(AcceptanceOutcome.Stopped);
     });
     Assert(result.Code == 1 && !result.Output.Contains("One-time local setup") && new LocalState(first).Active() is null, "Stopped child was reported as success or enrollment was requested again");
     Pass("saved enrollment is reused; a stopped child is not success");
+
+    // Real approval core -> wrapper subprocess -> launcher -> persisted review.
+    // Only the external portal and browser entry point are synthetic.
+    var source = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+    var payload = Directory.CreateDirectory(Path.Combine(root, "outcome-payload")).FullName;
+    File.Copy(Path.Combine(source, "scripts/Invoke-Acceptance.ps1"), Path.Combine(payload, "Invoke-Acceptance.ps1"));
+    File.Copy(Path.Combine(source, "scripts/Approve-GdapRelationship.ps1"), Path.Combine(payload, "ApprovalCore.ps1"));
+    File.Copy(Path.Combine(source, "tests/fixtures/ApprovalOutcome.ps1"), Path.Combine(payload, "Approve-GdapRelationship.ps1"));
+    foreach (var scenario in new[] { "post-timeout", "readback-error", "readback-identity", "activation-timeout", "cleanup-error", "already-approved", "already-activating", "abnormal-exit", "cancelled", "preflight-error", "success", "already-active" })
+    {
+        var requiresReview = scenario is not ("cancelled" or "preflight-error" or "success" or "already-active");
+        var active = scenario is "success" or "already-active";
+        var expectedPosts = scenario is "post-timeout" or "readback-error" or "readback-identity" or "activation-timeout" or "cleanup-error" or "success" ? 1 : 0;
+        var uncertain = Path.Combine(root, "outcome-" + scenario);
+        new LocalState(uncertain).Enroll(instanceId, trusted);
+        result = await Run(uncertain, [url], "", async (invitation, instance) =>
+        {
+            var start = Acceptor.AcceptanceCommand("pwsh", Path.Combine(payload, "Invoke-Acceptance.ps1"), invitation, instance);
+            start.ArgumentList.Insert(0, "-NonInteractive");
+            start.Environment["GDAP_TEST_RESULT"] = scenario;
+            start.RedirectStandardOutput = true;
+            start.RedirectStandardError = true;
+            using var child = System.Diagnostics.Process.Start(start)!;
+            var stdout = child.StandardOutput.ReadToEndAsync();
+            var stderr = child.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try { await child.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) { child.Kill(entireProcessTree: true); throw new Exception("Synthetic approval subprocess timed out"); }
+            var output = await stdout + await stderr;
+            Assert(output.Split("SYNTHETIC_POST").Length - 1 == expectedPosts, $"Unexpected POST count for {scenario}");
+            Assert(!output.Contains("SYNTHETIC_SECRET_MUST_NOT_APPEAR"), "Raw portal error leaked");
+            var expectedExit = scenario == "abnormal-exit" ? 17 : active ? 0 : requiresReview ? 3 : 2;
+            Assert(child.ExitCode == expectedExit, $"Wrong wrapper outcome for {scenario}: {child.ExitCode}. {output}");
+            return Acceptor.ClassifyAcceptanceExit(child.ExitCode);
+        });
+        Assert(result.Code == (active ? 0 : 1), $"Wrong launcher outcome for {scenario}");
+        var queue = await Run(uncertain, ["queue", "status"], "", MustNotAccept);
+        Assert(queue.Code == 0 && queue.Output.Contains(relationship) == requiresReview, $"Wrong durable reservation for {scenario}");
+        if (requiresReview)
+        {
+            result = await Run(uncertain, [url], "", MustNotAccept);
+            Assert(result.Code != 0 && result.Output.Contains("already queued or active"), "Uncertain approval was replayed before outcome review");
+            result = await Run(uncertain, ["queue", "resolve"], "NO\n", MustNotAccept);
+            Assert(result.Code != 0, "Cancelled outcome review succeeded");
+            result = await Run(uncertain, [url], "", MustNotAccept);
+            Assert(result.Code != 0 && result.Output.Contains("already queued or active"), "Cancelled review allowed replay");
+            result = await Run(uncertain, ["queue", "resolve"], "RESOLVED\n", MustNotAccept);
+            Assert(result.Code == 0 && result.Output.Contains("No invitation was replayed"), "Outcome review did not archive without replay");
+            queue = await Run(uncertain, ["queue", "status"], "", MustNotAccept);
+            Assert(!queue.Output.Contains(relationship), "Reviewed reservation remains active");
+        }
+        Pass($"real approval/wrapper/launcher outcome: {scenario}; correct state and no automatic retry");
+    }
 
     var cancelled = Path.Combine(root, "cancelled");
     result = await Run(cancelled, [], $"{url}\n{trusted.BaseUrl}\n{partner}\nNO\n", MustNotAccept);
@@ -51,7 +104,7 @@ try
     result = await Run(multiple, [url], "2\n", (_, instance) =>
     {
         Assert(instance == second, "Wrong instance selected");
-        return Task.FromResult(true);
+        return Task.FromResult(AcceptanceOutcome.Active);
     });
     Assert(result.Code == 0, "Instance selection failed");
     result = await Run(multiple, [url], "0\n", MustNotAccept);
@@ -105,7 +158,7 @@ try
 catch (Exception error) { Console.Error.WriteLine(error); return 1; }
 finally { Console.WriteLine($"Isolated fixtures: {root}"); }
 
-static async Task<(int Code, string Output)> Run(string state, string[] arguments, string input, Func<Invitation, Instance, Task<bool>> accept)
+static async Task<(int Code, string Output)> Run(string state, string[] arguments, string input, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept)
 {
     var originalInput = Console.In;
     var originalOutput = Console.Out;
@@ -122,6 +175,6 @@ static async Task<(int Code, string Output)> Run(string state, string[] argument
     }
     finally { Console.SetIn(originalInput); Console.SetOut(originalOutput); Console.SetError(originalError); }
 }
-Task<bool> MustNotAccept(Invitation invitation, Instance instance) { unexpectedAcceptances++; return Task.FromResult(false); }
+Task<AcceptanceOutcome> MustNotAccept(Invitation invitation, Instance instance) { unexpectedAcceptances++; return Task.FromResult(AcceptanceOutcome.Stopped); }
 static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
 void Pass(string message) { checks++; Console.WriteLine("PASS: " + message); }

@@ -19,7 +19,9 @@ param (
     [string]$BrowserPath,
     [switch]$PortalRequestDiagnostics,
     [switch]$ReuseSession,
-    [switch]$DisableAutomatedApproval
+    [switch]$DisableAutomatedApproval,
+    # In-process outcome channel to the wrapper, never authentication material.
+    [System.Collections.IDictionary]$OutcomeState = @{ RequiresReview = $false }
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -291,7 +293,8 @@ function Approve-GdapRelationship {
         [Parameter(Mandatory)] [scriptblock]$Request,
         [ValidateRange(0, 1800)] [int]$ActivationTimeoutSeconds = 180,
         [ValidateRange(1, 30)] [int]$PollIntervalSeconds = 3,
-        [switch]$DisableAutomatedApproval
+        [switch]$DisableAutomatedApproval,
+        [System.Collections.IDictionary]$OutcomeState = @{ RequiresReview = $false }
     )
     $id = Resolve-GdapRelationshipId $RelationshipId
     $path = "/fd/commerceMgmt2/partnermanage/gdapInvitations/$($id)?api-version=3.0"
@@ -301,6 +304,7 @@ function Approve-GdapRelationship {
     Write-Host (ConvertTo-GdapDisplayText ("Validated invitation: " + $evidence.Summary + '; status: ' + $evidence.Status))
     if ($evidence.Status -eq 'active') { return $invitation }
     if ($evidence.Status -notin @('approvalPending', 'approved', 'activating')) { throw 'The relationship is not in an approvable or activating state.' }
+    if ($evidence.Status -in @('approved', 'activating')) { $OutcomeState.RequiresReview = $true }
     if ($evidence.Status -eq 'approvalPending') {
         if ($DisableAutomatedApproval) { throw 'Automated approval is disabled. Use the Microsoft invitation link.' }
         if (-not $evidence.ETag) { throw 'The invitation did not supply an ETag.' }
@@ -310,8 +314,13 @@ function Approve-GdapRelationship {
         $fresh = & $Request @{ Path = $path; Method = 'Get' }
         $checked = Assert-GdapEvidence $fresh $id $ExpectedTenantId $ExpectedPartnerTenantId (& $GetSession)
         if ($checked.Status -eq 'active') { return $fresh }
+        if ($checked.Status -in @('approved', 'activating')) { $OutcomeState.RequiresReview = $true }
         if ($checked.Status -eq 'approvalPending') {
             if ($checked.Consent -cne $evidence.Consent -or $checked.ETag -cne $evidence.ETag) { throw 'Invitation changed during confirmation. Inspect and confirm it again.' }
+            # Set before dispatch, not after the reply. Keep it set through
+            # readback and browser cleanup; only a verified active result lets
+            # the wrapper report success. A failed POST is never retried.
+            $OutcomeState.RequiresReview = $true
             try {
                 $null = & $Request @{
                     Method = 'Post'
@@ -379,6 +388,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         RelationshipId = $RelationshipId; ExpectedTenantId = $ExpectedTenantId; ExpectedPartnerTenantId = $ExpectedPartnerTenantId
         GetSession = $getSession; Request = $request; ActivationTimeoutSeconds = $ActivationTimeoutSeconds
         PollIntervalSeconds = $PollIntervalSeconds; DisableAutomatedApproval = $DisableAutomatedApproval; WhatIf = [bool]$WhatIfPreference
+        OutcomeState = $OutcomeState
     }
     if ($PSBoundParameters.ContainsKey('Confirm')) { $approval.Confirm = [bool]$PSBoundParameters.Confirm }
     $approveFunction = ${function:Approve-GdapRelationship}

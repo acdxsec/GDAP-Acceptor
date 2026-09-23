@@ -7,6 +7,12 @@ custom API, or locally installed M365Internals checkout is needed.
 Download the [unsigned 0.1.5 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.5)
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
+Source/build version **0.1.6** preserves the local reservation after uncertain
+approval outcomes, failed readback and abnormal child exits. Before retrying,
+inspect the relationship in Microsoft/CIPP and run `gdap-acceptor queue resolve`.
+Known preflight cancellation and verified active results still clear the reservation.
+The published 0.1.5 files remain unchanged; they do not contain this fix.
+
 Development package **0.1.5** includes the Windows browser process-handoff fix:
 an exited launch process no longer stops sign-in while its private browser session
 is still responding. The user completed a Windows interactive dry run with this

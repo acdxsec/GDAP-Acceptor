@@ -12,6 +12,7 @@ return result;
 
 internal sealed record Instance(string BaseUrl, string PartnerTenantId);
 internal sealed record Invitation(string InstanceId, string RelationshipId);
+internal enum AcceptanceOutcome { Stopped, Active, NeedsReview }
 
 internal static class Acceptor
 {
@@ -84,7 +85,7 @@ internal static class Acceptor
 
     // Tests supply isolated state and an acceptance adapter; no CLI/environment
     // override can redirect the production payload or silently select a tenant.
-    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<bool>> accept)
+    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept)
     {
         try
         {
@@ -168,10 +169,12 @@ internal static class Acceptor
                 using var claim = local.TryClaim(invitation);
                 if (claim is null) { await Task.Delay(500); continue; }
                 var accepted = await accept(claim.Active.Invitation, claim.Active.Instance);
-                // An exception or process death leaves the durable claim intact.
-                // A normal return means preflight stopped or the child exited.
-                local.Complete(claim);
-                return accepted ? 0 : 1;
+                // Only a known preflight stop or verified active result can
+                // clear state. Unknown outcomes and abnormal child exits need
+                // explicit operator review, even when the child has stopped.
+                if (accepted is AcceptanceOutcome.Stopped or AcceptanceOutcome.Active) local.Complete(claim);
+                else Console.WriteLine("Acceptance outcome requires review. Reservation retained. Inspect Microsoft/CIPP, then use queue resolve; do not retry approval.");
+                return accepted == AcceptanceOutcome.Active ? 0 : 1;
             }
             Console.WriteLine("The pending invitation expired or is no longer available. Acceptance was not confirmed.");
             return 1;
@@ -188,7 +191,14 @@ internal static class Acceptor
         return start;
     }
 
-    private static async Task<bool> Accept(Invitation invitation, Instance instance, string stateDirectory)
+    internal static AcceptanceOutcome ClassifyAcceptanceExit(int exitCode) => exitCode switch
+    {
+        0 => AcceptanceOutcome.Active,
+        2 => AcceptanceOutcome.Stopped,
+        _ => AcceptanceOutcome.NeedsReview // Includes 3 and unexpected/crashed-child exits.
+    };
+
+    private static async Task<AcceptanceOutcome> Accept(Invitation invitation, Instance instance, string stateDirectory)
     {
         var baseUrl = ValidateBaseUrl(instance.BaseUrl);
         var partner = Guid.ParseExact(instance.PartnerTenantId, "D");
@@ -200,13 +210,14 @@ internal static class Acceptor
         var pwsh = OperatingSystem.IsWindows()
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe")
             : "/usr/bin/pwsh";
-        if (!File.Exists(pwsh)) { Console.WriteLine("PowerShell 7 is required at its standard installation location. No authentication was started."); return false; }
+        if (!File.Exists(pwsh)) { Console.WriteLine("PowerShell 7 is required at its standard installation location. No authentication was started."); return AcceptanceOutcome.Stopped; }
         var wrapper = Path.Combine(AppContext.BaseDirectory, "scripts", "Invoke-Acceptance.ps1");
-        if (!File.Exists(wrapper)) { Console.WriteLine("The bundled acceptance payload is missing. Install a complete package. No authentication was started."); return false; }
+        if (!File.Exists(wrapper)) { Console.WriteLine("The bundled acceptance payload is missing. Install a complete package. No authentication was started."); return AcceptanceOutcome.Stopped; }
         var start = AcceptanceCommand(pwsh, wrapper, invitation, instance);
         using var process = Process.Start(start) ?? throw new InvalidOperationException();
         await process.WaitForExitAsync();
-        var status = process.ExitCode == 0 ? "relationshipActive" : "acceptanceStopped";
+        var outcome = ClassifyAcceptanceExit(process.ExitCode);
+        var status = outcome switch { AcceptanceOutcome.Active => "relationshipActive", AcceptanceOutcome.Stopped => "acceptanceStopped", _ => "acceptanceNeedsReview" };
         var log = Path.Combine(stateDirectory, "diagnostics-" + DateTime.UtcNow.ToString("yyyy-MM-dd") + ".jsonl");
         try
         {
@@ -215,14 +226,14 @@ internal static class Acceptor
         }
         catch (IOException) { Console.WriteLine("Could not save local diagnostics. The acceptance result below is unchanged."); }
         catch (UnauthorizedAccessException) { Console.WriteLine("Could not save local diagnostics. The acceptance result below is unchanged."); }
-        if (process.ExitCode != 0) { Console.WriteLine("Acceptance not confirmed. Use the Microsoft fallback if needed."); return false; }
+        if (outcome != AcceptanceOutcome.Active) { Console.WriteLine("Acceptance not confirmed. Inspect the Microsoft relationship outcome before any further action."); return outcome; }
         Console.WriteLine("GDAP relationship is ACTIVE. CIPP onboarding is NOT verified by this launcher.");
         Console.WriteLine("Existing CIPP Automated Onboarding processes Microsoft's approval event on its schedule; Microsoft propagation can add a further delay. Do not approve again.");
         var returnUrl = OnboardingUrl(instance);
         Console.WriteLine($"CIPP onboarding: {returnUrl}\nFind relationship: {invitation.RelationshipId}");
         try { Process.Start(new ProcessStartInfo(returnUrl) { UseShellExecute = true }); }
         catch { Console.WriteLine("Could not open the default browser. Use the CIPP URL above. GDAP acceptance succeeded; do not repeat it."); }
-        return true;
+        return AcceptanceOutcome.Active;
     }
 
     private static void SelfTest()

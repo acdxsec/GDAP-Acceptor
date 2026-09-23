@@ -79,13 +79,24 @@ the observed portal response contract, live tenant validation, User-Agent fixes
 and correct WhatIf/confirmation scoping. Numeric duration is displayed as returned,
 not used to change the invitation's terms.
 
+## 0.1.6 outcome-review correction
+
+Source/build 0.1.6 implements [issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2).
+Uncertain/post-submission outcomes and abnormal child exits retain the local
+reservation until explicit review. The wrapper distinguishes these from known
+preflight cancellation and verified active success. Tests use real approval and
+wrapper code with synthetic portal boundaries, including a second-launch refusal
+before authentication. No live approval is required for these regression checks.
+The 0.1.5 release remains immutable and does not contain this correction.
+The 0.1.7 package produced by the current workflow is an upgrade-test fixture only.
+
 ## Remaining gates
 
-- A handled child-process approval error can clear its reservation even when the
+- In the published 0.1.5, a handled child-process approval error can clear its reservation even when the
   write outcome is uncertain. No automatic retry occurs, but the next explicit
   launch is not forced through outcome-review recovery. Inspect the Microsoft
   outcome after any approval error, even if the queue is empty. Preserving this
-  review gate is tracked in [issue #2](https://github.com/acdxsec/GDAP-Acceptor/issues/2).
+  review gate is implemented in source/build 0.1.6; use the newer build for this protection.
 - Navigation now pins the validated browser tab. A competing admin-centre tab
   reproduced the reported readiness timeout offline; that test now passes.
   Actual Edge on an isolated blank page also passed the production page-state
@@ -122,7 +133,7 @@ not used to change the invitation's terms.
 
 ## Launcher handoff checks
 
-Nine native workflow checks exercise pasted invitations, first-use trust, saved
+Native workflow checks exercise pasted invitations, first-use trust, saved
 enrollment, multiple-instance selection, cancellation, child outcomes and durable
 interrupted-work protection, including explicit reviewed recovery and refusal of
 busy or changed reservations. They use an internal acceptance seam and isolated
