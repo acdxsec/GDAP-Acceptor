@@ -49,7 +49,10 @@ $request = {
     $value
 }
 $params = @{ RelationshipId=$id; ExpectedTenantId=$tenant; ExpectedPartnerTenantId=$partner; Request=$request; GetSession={ $session }; Confirm=$false }
-$null = Approve-GdapRelationship @params -WhatIf
+$preview = @(Approve-GdapRelationship @params -WhatIf 6>&1)
+$display = ($preview | ForEach-Object { $_.ToString() }) -join "`n"
+Assert ($display.Contains('Step 3 of 4: review requested access') -and $display.Contains('Requested roles (1):') -and $display.Contains('  33333333-3333-3333-3333-333333333333')) 'Guided access review is missing or hides role IDs'
+Assert ($display.Contains("Customer tenant: $tenant") -and $display.Contains("Partner tenant: $partner") -and $display.Contains('730 (as returned by portal)') -and $display.Contains('P180D') -and $display.Contains('approvalPending')) 'Guided review omitted identity or access terms'
 Assert ($script:posts -eq 0) 'Portal preview submitted approval'
 $script:reads = 0
 $result = Approve-GdapRelationship @params

@@ -91,7 +91,18 @@ preflight cancellation and verified active success. Tests use real approval and
 wrapper code with synthetic portal boundaries, including a second-launch refusal
 before authentication. No live approval is required for these regression checks.
 The 0.1.5 release remains immutable and does not contain this correction.
-The 0.1.7 package produced by the current workflow is an upgrade-test fixture only.
+The 0.1.7 package produced by that workflow was an upgrade-test fixture only.
+
+## 0.2.0 guided workspace
+
+Development source adds a scrolling terminal menu for invitation acceptance,
+queue/recovery, trusted connections and diagnostic export. The existing approval
+path now prints separate access-review fields and role IDs. All consent and
+identity checks remain in place; uncertain outcomes still retain their reservation.
+See [operator workspace](OPERATOR-WORKSPACE.md) for scope and acceptance criteria.
+The current workflow's 0.2.1 installer is an upgrade-test fixture, not a release.
+The published 0.1.6 assets are unchanged. New Windows/Linux CI and desktop evidence
+must be distinguished from the historical acceptance evidence above.
 
 ## Remaining gates
 

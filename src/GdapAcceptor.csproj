@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>gdap-acceptor</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.1.6</Version>
+    <Version>0.2.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="StateContracts" />

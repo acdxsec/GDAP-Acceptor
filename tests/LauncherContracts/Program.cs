@@ -10,6 +10,60 @@ var checks = 0;
 var unexpectedAcceptances = 0;
 try
 {
+    var menu = await Run(Path.Combine(root, "menu-exit"), [], "0\n", MustNotAccept);
+    Assert(menu.Code == 0 && menu.Output.Contains("1. Accept invitation") && menu.Output.Contains("2. Queue and recovery"), "Guided home menu is missing or exiting starts acceptance");
+    Pass("guided home menu exits without setup or authentication");
+
+    var reviewRoot = Path.Combine(root, "menu-review");
+    var reviewState = new LocalState(reviewRoot);
+    reviewState.Enroll(instanceId, trusted);
+    var reviewInvitation = new Invitation(instanceId, relationship);
+    reviewState.Enqueue(reviewInvitation);
+    reviewState.TryClaim(reviewInvitation)!.Dispose();
+    menu = await Run(reviewRoot, [], "2\nr\nNO\n0\n", MustNotAccept);
+    Assert(menu.Output.Contains("Active or needs review") && menu.Output.Contains(relationship) && menu.Output.Contains("Recovery cancelled") && reviewState.Active() is not null, "Guided queue review did not display and retain cancelled recovery");
+    menu = await Run(reviewRoot, [], "2\nr\nRESOLVED\n0\n", MustNotAccept);
+    Assert(menu.Output.Contains("No invitation was replayed") && reviewState.Active() is null, "Guided recovery did not resolve explicitly without replay");
+    Pass("guided queue displays interrupted work and resolves only after explicit review");
+
+    var settingsRoot = Path.Combine(root, "menu-settings");
+    menu = await Run(settingsRoot, [], $"3\na\n{trusted.BaseUrl}\n{partner}\nTRUST\n3\n\n0\n", MustNotAccept);
+    Assert(new LocalState(settingsRoot).ReadInstances().Values.Contains(trusted) && menu.Output.Contains("Saved connections") && menu.Output.Contains(trusted.BaseUrl), "Guided settings did not enroll and display the trusted connection");
+    Pass("guided settings enroll and display trusted connections without signing in");
+
+    var diagnosticPath = Path.Combine(root, "guided-diagnostics.jsonl");
+    menu = await Run(settingsRoot, [], $"4\n{diagnosticPath}\n0\n", MustNotAccept);
+    Assert(File.Exists(diagnosticPath) && menu.Output.Contains("Exported sanitized state logs"), "Guided diagnostic export is missing");
+    File.WriteAllText(diagnosticPath, "keep existing file");
+    menu = await Run(settingsRoot, [], $"4\n{diagnosticPath}\n0\n", MustNotAccept);
+    Assert(File.ReadAllText(diagnosticPath) == "keep existing file", "Guided export overwrote an existing file");
+    Pass("guided diagnostics export without authentication and never overwrite a file");
+
+    menu = await Run(settingsRoot, [], "1\n3\n0\n", MustNotAccept);
+    Assert(!menu.Output.Contains("CIPP CONNECTION SETTINGS | Saved connections") && menu.Output.Contains("Paste the full Microsoft"), "Invitation input was interpreted as a menu command");
+    menu = await Run(settingsRoot, [], "1\n\n4\n\ninvalid\n0\n", MustNotAccept);
+    Assert(menu.Code == 0 && menu.Output.Contains("Select a listed action"), "Cancelled or invalid menu input did not return safely");
+    menu = await Run(settingsRoot, [], "", MustNotAccept);
+    Assert(menu.Code == 0, "End of input did not exit the menu");
+    Pass("guided subprompts do not execute menu commands; blank input, invalid choices and EOF are safe");
+
+    var menuCalls = 0;
+    menu = await Run(settingsRoot, [], $"1\n{url}\n2\n0\n", (_, _) => { menuCalls++; return Task.FromResult(AcceptanceOutcome.Active); });
+    Assert(menuCalls == 1 && menu.Output.Contains("CIPP onboarding has NOT been verified") && menu.Output.Contains("No active reservation needs review"), "Guided acceptance did not return to the workspace with an accurate outcome");
+    menuCalls = 0;
+    menu = await Run(settingsRoot, [], $"1\n{url}\n1\n{url}\n2\n\n0\n", (_, _) => { menuCalls++; return Task.FromResult(AcceptanceOutcome.NeedsReview); });
+    Assert(menuCalls == 1 && menu.Output.Contains("already queued or active") && menu.Output.Contains("Active or needs review") && new LocalState(settingsRoot).Active() is not null, "Guided flow replayed an uncertain approval or hid its reservation");
+    Pass("guided acceptance returns to the menu; uncertain approval is visible and cannot be replayed");
+
+    var corruptRoot = Path.Combine(root, "menu-corrupt");
+    var corruptState = new LocalState(corruptRoot);
+    corruptState.Enroll(instanceId, trusted);
+    var corruptFile = Path.Combine(corruptRoot, "active-v1.json");
+    File.WriteAllText(corruptFile, "invalid state fixture");
+    menu = await Run(corruptRoot, [], "2\n0\n", MustNotAccept);
+    Assert(menu.Output.Contains("Could not read local queue state") && File.ReadAllText(corruptFile) == "invalid state fixture", "Menu reset or concealed corrupt queue state");
+    Pass("guided queue reports corrupt state without resetting it or authenticating");
+
     var first = Path.Combine(root, "first-use");
     var calls = 0;
     var result = await Run(first, [], $"{url}\n{trusted.BaseUrl}\n{partner}\nTRUST\n", (invitation, instance) =>
