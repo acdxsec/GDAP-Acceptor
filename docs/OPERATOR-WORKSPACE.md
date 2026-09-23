@@ -38,7 +38,11 @@ screen that would interfere with the child PowerShell's confirmation prompts.
 Tests exercise the real launcher with isolated state and a non-authenticating
 acceptance adapter, plus the real approval/wrapper subprocess contracts.
 
-## Remaining CIPP status integration
+## CIPP status integration: 0.2.0 boundary and 0.3.0 extension
+
+The section below records the original 0.2.0 boundary. Development 0.3.0 now
+implements the separate API-client connector; see [CIPP status](CIPP-STATUS.md)
+for setup, verification and the still-required live deployment check.
 
 Verified active GDAP still opens CIPP's normal onboarding list and displays the
 relationship ID. It does **not** prove CIPP received the approval event or started
