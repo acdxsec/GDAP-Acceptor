@@ -98,7 +98,7 @@ internal static class Acceptor
             {
                 Console.WriteLine("gdap-acceptor [<Microsoft-invitation-url>] | configure | queue status | queue resolve | diagnostics export <new-file> | self-test");
                 Console.WriteLine("With no arguments: open the guided workspace for acceptance, queue/recovery, settings and diagnostics. You can still paste an invitation at its home prompt. Customer identity is confirmed after fresh browser sign-in.");
-                Console.WriteLine("CIPP read-only status: cipp configure | cipp disconnect | cipp status <Microsoft-invitation-url> | cipp watch <Microsoft-invitation-url>");
+                Console.WriteLine("Central read-only status: cipp configure | cipp disconnect | cipp remove-legacy-credential | cipp status <Microsoft-invitation-url> | cipp watch <Microsoft-invitation-url>");
                 return 0;
             }
             var local = new LocalState(stateDirectory);
@@ -110,6 +110,8 @@ internal static class Acceptor
             }
             if (cipp is not null && args.SequenceEqual(new[] { "cipp", "disconnect" }))
                 return await cipp.Disconnect(SelectInstance(local));
+            if (cipp is not null && args.SequenceEqual(new[] { "cipp", "remove-legacy-credential" }))
+                return await cipp.RemoveLegacyCredential(SelectInstance(local));
             if (cipp is not null && args.Length == 3 && args[0] == "cipp" && args[1] is "status" or "watch")
             {
                 var relationship = ParseMicrosoftInvitation(args[2]);

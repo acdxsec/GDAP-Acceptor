@@ -1,123 +1,121 @@
 using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Gdap.Status;
 
 internal static class CippContracts
 {
+    private const string Partner = "22222222-2222-2222-2222-222222222222";
+    private const string Setup = "\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\n44444444-4444-4444-4444-444444444444\nCONNECT\n";
     internal static async Task Run(string root)
     {
-        var state = Path.Combine(root, "cipp-status");
-        var instance = new Instance("https://cipp.example", "22222222-2222-2222-2222-222222222222");
+        var state = Path.Combine(root, "central-status");
+        var instance = new Instance("https://cipp.example", Partner);
         var id = "11111111-1111-1111-1111-111111111111";
         var url = "https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/relationship-1";
         new LocalState(state).Enroll(id, instance);
-        var vault = new FakeVault();
-        var http = new Peer();
-        using var connector = new CippStatus(state, vault, http, () => "synthetic-secret");
+        var legacy = new Legacy();
+        var peer = new Peer();
+        var signIns = 0;
+        Task<string> SignIn(CentralConnection connection, CancellationToken cancellation)
+        {
+            cancellation.ThrowIfCancellationRequested(); signIns++;
+            Assert(connection.Origin == "https://cippapi.fizlian.dev" && connection.Instance == instance && connection.ClientId == "33333333-3333-3333-3333-333333333333", "Unvalidated sign-in settings");
+            return Task.FromResult("synthetic-staff-token");
+        }
+        using var connector = new CippStatus(state, peer, SignIn, legacy);
         var result = await Launch(state, ["cipp", "status", url], "", connector);
-        Assert(result.Code != 0 && result.Output.Contains("not configured") && http.Calls.Count == 0, "Unconfigured status authenticated or reported success");
-        result = await Launch(state, ["cipp", "configure"], "https://api.cipp.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\napi://33333333-3333-3333-3333-333333333333/.default\nCONNECT\n", connector);
-        Assert(result.Code == 0 && result.Output.Contains("read-only connection saved") && vault.Value is not null, "CIPP connection was not saved after read-only verification");
-        Assert(!result.Output.Contains("synthetic-secret") && !Directory.GetFiles(state).Any(file => File.ReadAllText(file).Contains("synthetic-secret")), "Credential leaked outside vault");
-        Assert(http.Calls.SequenceEqual(new[] { "POST https://login.microsoftonline.com/22222222-2222-2222-2222-222222222222/oauth2/v2.0/token", "GET https://api.cipp.example/api/ListTenantOnboarding" }), "Setup contacted an unexpected endpoint");
-        Console.WriteLine("PASS: CIPP setup verifies read-only access, saves credentials only in the vault, and never authenticates when unconfigured");
-        foreach (var (status, expected) in new[] { ("queued", "queued; not running"), ("running", "running"), ("failed", "failed; inspect CIPP"), ("succeeded", "succeeded") })
+        Assert(result.Code != 0 && result.Output.Contains("not configured") && signIns == 0 && peer.Calls.Count == 0, "Unconfigured status performed authentication");
+        result = await Launch(state, ["cipp", "configure"], Setup, connector);
+        Assert(result.Code == 0 && result.Output.Contains("Central connection saved") && peer.Calls.SequenceEqual(new[] { "GET https://cippapi.fizlian.dev/v1/connection" }), "Central setup failed or called CIPP directly");
+        var configFile = Path.Combine(state, "central-status-" + id + ".json");
+        var saved = File.ReadAllText(configFile);
+        Assert(!saved.Contains("synthetic-staff-token") && !saved.Contains("ClientSecret") && legacy.Keys.Count == 0, "Setup persisted credentials or accessed old vault");
+        Console.WriteLine("PASS: central setup uses staff authentication; only non-secret settings are persisted; no direct CIPP access or legacy credential use");
+        foreach (var status in new[] { "waiting", "pending", "queued", "running", "succeeded", "failed", "cancelled" })
         {
-            http.Rows = "[{\"RowKey\":\"another-relationship\",\"Status\":\"running\"},{\"RowKey\":\"relationship-1\",\"Status\":\"" + status + "\",\"Relationship\":{\"id\":\"relationship-1\"}}]";
+            peer.Status = status;
             result = await Launch(state, ["cipp", "status", url], "", connector);
-            Assert(result.Output.Contains("CIPP onboarding: " + expected) && !result.Output.Contains("another-relationship"), "Wrong relationship or status displayed: " + status);
+            Assert((result.Code == 0) == (status is "running" or "succeeded"), "Incorrect status exit for " + status);
+            if (status == "queued") Assert(result.Output.Contains("queued; not running"), "Queued misrepresented");
         }
-        foreach (var bad in new[] { "{\"Results\":[]}", "[{\"RowKey\":\"relationship-1\",\"Status\":\"unexpected-secret\"}]", "[{\"RowKey\":\"relationship-1\",\"Status\":\"running\",\"Relationship\":{\"id\":\"different\"}}]", "[{\"RowKey\":\"relationship-1\",\"Status\":\"running\"},{\"RowKey\":\"relationship-1\",\"Status\":\"failed\"}]" })
+        foreach (var bad in new[] {
+            new OnboardingStatus(1, instance.BaseUrl, Partner, "different", "running", DateTimeOffset.UtcNow),
+            new OnboardingStatus(1, "https://other.example", Partner, "relationship-1", "running", DateTimeOffset.UtcNow),
+            new OnboardingStatus(1, instance.BaseUrl, id, "relationship-1", "running", DateTimeOffset.UtcNow),
+            new OnboardingStatus(1, instance.BaseUrl, Partner, "relationship-1", "unknown-secret", DateTimeOffset.UtcNow),
+            new OnboardingStatus(1, instance.BaseUrl, Partner, "relationship-1", "running", DateTimeOffset.UtcNow.AddHours(-1)),
+            new OnboardingStatus(1, instance.BaseUrl, Partner, "relationship-1", "running", DateTimeOffset.UtcNow.AddHours(1)) })
         {
-            http.Rows = bad;
+            peer.Override = JsonSerializer.Serialize(bad);
             result = await Launch(state, ["cipp", "status", url], "", connector);
-            Assert(result.Code != 0 && result.Output.Contains("unavailable") && !result.Output.Contains("unexpected-secret") && !result.Output.Contains("CIPP onboarding: running"), "Unsafe status evidence was accepted");
+            Assert(result.Code != 0 && !result.Output.Contains("CIPP onboarding: running") && !result.Output.Contains("unknown-secret"), "Conflicting or stale evidence accepted");
         }
-        http.Rows = "[]";
+        peer.Override = "{\"version\":1,\"version\":1}";
         result = await Launch(state, ["cipp", "status", url], "", connector);
-        Assert(result.Code != 0 && result.Output.Contains("Waiting for a matching"), "Missing record presented as onboarded");
-        Console.WriteLine("PASS: exact relationship correlation; queued is not running; malformed, conflicting and duplicate evidence fails closed");
-        var poll = 0;
-        using var watcher = new CippStatus(state, vault, new Peer
+        Assert(result.Code != 0, "Duplicate response keys accepted");
+        peer.Override = null;
+        Console.WriteLine("PASS: exact relationship/partner/CIPP binding, status distinctions, duplicate and stale-evidence rejection");
+        foreach (var code in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.TooManyRequests, HttpStatusCode.ServiceUnavailable, HttpStatusCode.Redirect })
         {
-            NextRows = () => ++poll == 1 ? "[]" : poll == 2 ? "[{\"RowKey\":\"relationship-1\",\"Status\":\"queued\"}]" : "[{\"RowKey\":\"relationship-1\",\"Status\":\"running\"}]"
-        }, () => "synthetic-secret", (_, _) => Task.CompletedTask);
-        var approvalCalls = 0;
-        result = await Launch(state, [url], "", watcher, (_, _) => { approvalCalls++; return Task.FromResult(AcceptanceOutcome.Active); });
-        Assert(result.Code == 0 && approvalCalls == 1 && poll == 3 && result.Output.Contains("queued; not running") && result.Output.Contains("CIPP onboarding: running") && new LocalState(state).Active() is null, "Acceptance was not followed by independent CIPP status observation");
-        using var broken = new CippStatus(state, vault, new Peer { Failure = true }, () => "synthetic-secret");
-        result = await Launch(state, [url], "", broken, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
-        Assert(result.Code == 0 && result.Output.Contains("unavailable") && new LocalState(state).Active() is null, "CIPP failure changed successful GDAP acceptance or retained its lock");
-        var beforeStop = poll;
-        result = await Launch(state, [url], "", watcher, (_, _) => Task.FromResult(AcceptanceOutcome.Stopped));
-        Assert(poll == beforeStop, "A stopped approval contacted CIPP");
-        Console.WriteLine("PASS: verified active approval is followed by bounded read-only watch; CIPP failure never changes acceptance or retries approval");
-        http.Rows = "[{\"RowKey\":\"relationship-1\",\"Status\":\"running\"}]";
-        result = await Launch(state, [], $"5\n{url}\n\n0\n", connector);
-        Assert(result.Code == 0 && result.Output.Contains("5. Check CIPP onboarding") && result.Output.Contains("CIPP onboarding: running"), "Guided status check is missing");
-        result = await Launch(state, [], "3\nc\nhttps://api.cipp.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\napi://33333333-3333-3333-3333-333333333333/.default\nNO\n0\n", connector);
-        Assert(result.Output.Contains("Connection setup cancelled"), "Guided CIPP configuration is missing");
-        Console.WriteLine("PASS: guided settings and independent status checks use the same connector without approval");
-        Assert(!vault.Value!.Contains("synthetic-token"), "Access token was persisted in the vault");
-        var savedCredential = vault.Value;
-        foreach (var (code, message) in new[] { (HttpStatusCode.Unauthorized, "Authentication rejected"), (HttpStatusCode.Forbidden, "Access denied"), (HttpStatusCode.TooManyRequests, "Rate limited"), (HttpStatusCode.Redirect, "Redirect refused") })
-        {
-            var errorPeer = new Peer { ApiStatus = code };
-            using var errorConnector = new CippStatus(state, vault, errorPeer, () => "synthetic-secret");
-            result = await Launch(state, ["cipp", "status", url], "", errorConnector);
-            Assert(result.Code != 0 && result.Output.Contains(message) && !result.Output.Contains("SYNTHETIC_SECRET") && errorPeer.Calls.Count == 2, "HTTP error leaked data, retried or lacked actionable guidance");
-            result = await Launch(state, ["cipp", "configure"], "https://api.cipp.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\napi://33333333-3333-3333-3333-333333333333/.default\nCONNECT\n", errorConnector);
-            Assert(result.Code != 0 && vault.Value == savedCredential, "Failed configuration replaced a working connection");
+            peer.Code = code;
+            var before = peer.Calls.Count;
+            result = await Launch(state, ["cipp", "status", url], "", connector);
+            Assert(result.Code != 0 && !result.Output.Contains("PRIVATE_SECRET") && peer.Calls.Count == before + 1, "HTTP error leaked or retried");
+            result = await Launch(state, ["cipp", "configure"], Setup, connector);
+            Assert(result.Code != 0 && File.ReadAllText(configFile) == saved, "Failed setup overwrote existing settings");
         }
-        Console.WriteLine("PASS: authentication, permission, rate-limit and redirect errors are safe and do not replace existing credentials");
-
-        var boundedPeer = new Peer();
-        using var bounded = new CippStatus(state, vault, boundedPeer, () => "synthetic-secret", (_, _) => Task.CompletedTask);
+        peer.Code = HttpStatusCode.OK;
+        peer.Status = "running";
+        result = await Launch(state, [], $"5\n{url}\n\n0\n", connector);
+        Assert(result.Output.Contains("CIPP onboarding: running"), "Guided status check failed");
+        var calls = 0;
+        result = await Launch(state, [url], "", connector, (_, _) => { calls++; return Task.FromResult(AcceptanceOutcome.Active); });
+        Assert(result.Code == 0 && calls == 1 && result.Output.Contains("CIPP onboarding: running") && new LocalState(state).Active() is null, "Independent watch after successful approval failed");
+        peer.Code = HttpStatusCode.ServiceUnavailable;
+        result = await Launch(state, [url], "", connector, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
+        Assert(result.Code == 0 && new LocalState(state).Active() is null, "Central failure invalidated approval or retained reservation");
+        var beforeStop = peer.Calls.Count;
+        result = await Launch(state, [url], "", connector, (_, _) => Task.FromResult(AcceptanceOutcome.Stopped));
+        Assert(peer.Calls.Count == beforeStop, "Stopped approval read status");
+        Console.WriteLine("PASS: menu and post-approval watch remain read-only; central outages cannot invalidate or retry approval");
+        var boundedPeer = new Peer { Status = "queued" };
+        using var bounded = new CippStatus(state, boundedPeer, SignIn, legacy, (_, _) => Task.CompletedTask);
         result = await Launch(state, ["cipp", "watch", url], "", bounded);
-        Assert(result.Code != 0 && result.Output.Contains("watch limit reached") && boundedPeer.Calls.Count(call => call.StartsWith("GET ")) == 40 && boundedPeer.Calls.Count(call => call.StartsWith("POST ")) == 1, "Watch was unbounded or did not reuse its in-memory token");
-        using var cancelledWatch = new CippStatus(state, vault, new Peer(), () => "synthetic-secret", (_, _) => throw new OperationCanceledException());
-        result = await Launch(state, [url], "", cancelledWatch, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
-        Assert(result.Code == 0 && result.Output.Contains("stopped or timed out") && new LocalState(state).Active() is null, "Cancelling status observation changed successful approval");
-        Console.WriteLine("PASS: watch is bounded, tokens are memory-only, and cancelling observation leaves accepted GDAP intact");
-        var beforeInvalid = http.Calls.Count;
-        foreach (var invalidOrigin in new[] { "http://api.cipp.example", "https://user:secret@api.cipp.example", "https://api.cipp.example/path", "https://api.cipp.example/?secret=x" })
+        Assert(result.Output.Contains("watch limit reached") && boundedPeer.Calls.Count == 40, "Unbounded watch");
+        using var cancelled = new CippStatus(state, new Peer(), (_, _) => throw new OperationCanceledException(), legacy);
+        result = await Launch(state, [url], "", cancelled, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
+        Assert(result.Code == 0 && result.Output.Contains("stopped or timed out") && new LocalState(state).Active() is null, "Staff cancellation invalidated approval");
+        var beforeBad = signIns;
+        foreach (var origin in new[] { "http://cippapi.fizlian.dev", "https://user:secret@cippapi.fizlian.dev", "https://cippapi.fizlian.dev/path", "https://cippapi.fizlian.dev/?token=secret" })
         {
-            result = await Launch(state, ["cipp", "configure"], invalidOrigin + "\n", connector);
-            Assert(result.Code != 0 && vault.Value == savedCredential && http.Calls.Count == beforeInvalid && !result.Output.Contains("secret@"), "Unsafe API destination accepted or leaked");
+            result = await Launch(state, ["cipp", "configure"], origin + "\n", connector);
+            Assert(result.Code != 0 && File.ReadAllText(configFile) == saved && signIns == beforeBad, "Unsafe destination authenticated");
         }
         var local = new LocalState(state);
-        local.RemoveInstance(id);
-        local.Enroll(id, new Instance("https://different.example", instance.PartnerTenantId));
+        local.RemoveInstance(id); local.Enroll(id, new Instance("https://different.example", Partner));
         result = await Launch(state, ["cipp", "status", url], "", connector);
-        Assert(result.Code != 0 && http.Calls.Count == beforeInvalid, "Changed CIPP enrollment reused an old credential");
+        Assert(result.Code != 0 && signIns == beforeBad, "Changed enrollment used old central binding");
         local.RemoveInstance(id); local.Enroll(id, instance);
-        vault.ThrowOnWrite = true;
-        result = await Launch(state, ["cipp", "configure"], "https://api.cipp.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\napi://33333333-3333-3333-3333-333333333333/.default\nCONNECT\n", connector);
-        Assert(result.Code != 0 && vault.Value == savedCredential && !Directory.GetFiles(state).Any(file => File.ReadAllText(file).Contains("synthetic-secret")), "Vault failure wrote an insecure fallback");
-        vault.ThrowOnWrite = false;
-        Console.WriteLine("PASS: unsafe destinations, enrollment changes and vault failures cannot leak or silently retarget credentials");
-        result = await Launch(state, ["cipp", "disconnect"], "NO\n", connector);
-        Assert(vault.Value is not null, "Cancelled disconnect deleted the credential");
-        result = await Launch(state, ["cipp", "disconnect"], "DISCONNECT\n", connector);
-        Assert(result.Code == 0 && vault.Value is null, "Explicit local disconnect did not remove the credential");
+        result = await Launch(state, ["cipp", "remove-legacy-credential"], "NO\n", connector);
+        Assert(legacy.Keys.Count == 0, "Legacy removal without consent");
+        result = await Launch(state, ["cipp", "remove-legacy-credential"], "REMOVE\n", connector);
+        var expectedKey = "gdap-acceptor/cipp-status/v1/" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(state)))) + "/" + id;
+        Assert(result.Code == 0 && legacy.Keys.SequenceEqual(new[] { expectedKey }) && File.Exists(configFile), "Wrong legacy credential target");
         if (OperatingSystem.IsWindows())
         {
-            // Unique fixture state gives a unique vault target; never touches a real enrollment.
-            using var native = new CippStatus(state, new OsCredentialVault(), new Peer(), () => "synthetic-secret");
-            try
-            {
-                result = await Launch(state, ["cipp", "configure"], "https://api.cipp.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\napi://33333333-3333-3333-3333-333333333333/.default\nCONNECT\n", native);
-                Assert(result.Code == 0, "Windows credential vault write failed");
-                result = await Launch(state, ["cipp", "status", url], "", native);
-                Assert(result.Output.Contains("Waiting for a matching"), "Windows credential vault read failed");
-            }
-            finally { await Launch(state, ["cipp", "disconnect"], "DISCONNECT\n", native); }
-            result = await Launch(state, ["cipp", "status", url], "", native);
-            Assert(result.Output.Contains("not configured"), "Windows credential vault delete failed");
-            Console.WriteLine("PASS: real Windows vault round-trip via launcher commands with synthetic credentials and HTTP");
+            using var native = new CippStatus(state, new Peer(), SignIn, new OsCredentialVault());
+            result = await Launch(state, ["cipp", "remove-legacy-credential"], "REMOVE\n", native);
+            Assert(result.Code == 0, "Native idempotent deletion of absent fixture credential failed");
         }
-        Console.WriteLine("PASS: disconnect requires explicit consent and removes only local API credentials");
+        result = await Launch(state, ["cipp", "disconnect"], "NO\n", connector);
+        Assert(File.Exists(configFile), "Cancelled disconnect removed settings");
+        result = await Launch(state, ["cipp", "disconnect"], "DISCONNECT\n", connector);
+        Assert(result.Code == 0 && !File.Exists(configFile), "Disconnect did not remove local settings");
+        Console.WriteLine("PASS: bounded watch, cancellation, destination and enrollment checks, consent-based exact legacy cleanup and disconnect");
     }
-
-    internal static async Task<(int Code, string Output)> Launch(string state, string[] args, string input, CippStatus connector, Func<Invitation, Instance, Task<AcceptanceOutcome>>? accept = null)
+    private static async Task<(int Code, string Output)> Launch(string state, string[] args, string input, CippStatus connector, Func<Invitation, Instance, Task<AcceptanceOutcome>>? accept = null)
     {
         var previous = (Console.In, Console.Out, Console.Error);
         using var reader = new StringReader(input);
@@ -130,41 +128,29 @@ internal static class CippContracts
         }
         finally { Console.SetIn(previous.In); Console.SetOut(previous.Out); Console.SetError(previous.Error); }
     }
-
-    internal static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
-    internal sealed class FakeVault : ICredentialVault
+    private static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
+    private sealed class Legacy : ILegacyCredentialStore
     {
-        internal string? Value;
-        internal bool ThrowOnWrite;
-        public Task<string?> Read(string key, CancellationToken token) => Task.FromResult(Value);
-        public Task Write(string key, string value, CancellationToken token) { if (ThrowOnWrite) throw new IOException("SYNTHETIC_SECRET_MUST_NOT_APPEAR"); Value = value; return Task.CompletedTask; }
-        public Task Delete(string key, CancellationToken token) { Value = null; return Task.CompletedTask; }
+        internal List<string> Keys = [];
+        public Task Delete(string key, CancellationToken token) { Keys.Add(key); return Task.CompletedTask; }
     }
-    internal sealed class Peer : HttpMessageHandler
+    private sealed class Peer : HttpMessageHandler
     {
         internal List<string> Calls = [];
-        internal string Rows = "[]";
-        internal Func<string>? NextRows;
-        internal bool Failure;
-        internal HttpStatusCode ApiStatus = HttpStatusCode.OK;
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        internal string Status = "waiting";
+        internal string? Override;
+        internal HttpStatusCode Code = HttpStatusCode.OK;
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
+            Assert(request.Method == HttpMethod.Get && request.RequestUri?.Host == "cippapi.fizlian.dev" && request.Headers.Authorization?.ToString() == "Bearer synthetic-staff-token", "Unexpected destination, method or credential");
             Calls.Add(request.Method + " " + request.RequestUri);
-            if (Failure) throw new HttpRequestException("SYNTHETIC_SECRET_MUST_NOT_APPEAR");
-            if (request.Method == HttpMethod.Post)
-            {
-                Assert((await request.Content!.ReadAsStringAsync(token)).Contains("client_secret=synthetic-secret"), "Secret not sent as form data");
-                return new(HttpStatusCode.OK) { Content = new StringContent("{\"access_token\":\"synthetic-token\",\"token_type\":\"Bearer\",\"expires_in\":3600}", System.Text.Encoding.UTF8, "application/json") };
-            }
-            Assert(request.Headers.Authorization?.ToString() == "Bearer synthetic-token", "API authorization missing");
-            if (ApiStatus != HttpStatusCode.OK)
-            {
-                var failure = new HttpResponseMessage(ApiStatus) { Content = new StringContent("SYNTHETIC_SECRET_MUST_NOT_APPEAR") };
-                failure.Headers.Location = new Uri("https://untrusted.example/");
-                failure.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(90));
-                return failure;
-            }
-            return new(HttpStatusCode.OK) { Content = new StringContent(NextRows?.Invoke() ?? Rows, System.Text.Encoding.UTF8, "application/json") };
+            var json = Code != HttpStatusCode.OK ? "PRIVATE_SECRET" : request.RequestUri!.AbsolutePath == "/v1/connection"
+                ? JsonSerializer.Serialize(new ConnectionInfo(1, "https://cipp.example", Partner))
+                : Override ?? JsonSerializer.Serialize(new OnboardingStatus(1, "https://cipp.example", Partner, "relationship-1", Status, DateTimeOffset.UtcNow));
+            var response = new HttpResponseMessage(Code) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+            response.Headers.Location = new Uri("https://attacker.example");
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(90));
+            return Task.FromResult(response);
         }
     }
 }

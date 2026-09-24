@@ -6,6 +6,25 @@ on:
 permissions:
   contents: read
 jobs:
+  central-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Authenticated central HTTP contracts
+        run: dotnet run --project tests/ServerContracts
+      - name: Build central Docker image
+        run: docker build --tag gdap-status:0.4.0 --file server/Dockerfile .
+      - name: Isolated central container smoke test
+        shell: pwsh
+        run: ./tools/Test-ServerContainer.ps1
+      - name: Validate deployment compose syntax
+        run: docker compose --file deploy/compose.yml config --quiet
+      - name: Validate HTTPS proxy configuration without network access
+        run: docker run --rm --network none -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   verify:
     timeout-minutes: 20
     strategy:
@@ -64,7 +83,7 @@ jobs:
           if-no-files-found: error
       # Development artifacts only. No release or deployment step exists.
   package:
-    needs: verify
+    needs: [verify, central-status]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,9 +106,9 @@ jobs:
         shell: pwsh
         run: |
           ./tools/Build-Installers.ps1
-          ./tools/Build-Installers.ps1 -Version 0.3.1 -OutputDirectory dist/upgrade-test
+          ./tools/Build-Installers.ps1 -Version 0.4.1 -OutputDirectory dist/upgrade-test
           ./tools/Test-Installers.ps1 -Directory dist/installers
-          ./tools/Test-Installers.ps1 -Directory dist/upgrade-test -Version 0.3.1
+          ./tools/Test-Installers.ps1 -Directory dist/upgrade-test -Version 0.4.1
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-development-installers
@@ -111,7 +130,7 @@ jobs:
           path: dist
       - name: Isolated per-user installer lifecycle
         shell: pwsh
-        run: ./tools/Test-WindowsInstaller.ps1 -Msi dist/installers/gdap-acceptor-0.3.0-x64.msi -UpgradeMsi dist/upgrade-test/gdap-acceptor-0.3.1-x64.msi
+        run: ./tools/Test-WindowsInstaller.ps1 -Msi dist/installers/gdap-acceptor-0.4.0-x64.msi -UpgradeMsi dist/upgrade-test/gdap-acceptor-0.4.1-x64.msi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
