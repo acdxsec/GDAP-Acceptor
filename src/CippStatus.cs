@@ -27,7 +27,9 @@ internal sealed class CippStatus : IDisposable
         Func<TimeSpan, CancellationToken, Task>? delay = null)
     {
         directory = Path.GetFullPath(stateDirectory);
-        http = new HttpClient(transport) { Timeout = TimeSpan.FromSeconds(40), MaxResponseContentBufferSize = 16384 };
+        // Scale-to-zero hosts can need time to pull/start the container. This
+        // remains bounded by the enclosing setup/check/watch cancellation too.
+        http = new HttpClient(transport) { Timeout = TimeSpan.FromMinutes(2), MaxResponseContentBufferSize = 16384 };
         this.signIn = signIn; this.legacy = legacy; this.delay = delay ?? Task.Delay;
     }
     internal Task<int> Configure(string id, Instance instance) => Guard(async () =>
@@ -43,6 +45,7 @@ internal sealed class CippStatus : IDisposable
         if (Ask("Type CONNECT to sign in and save these non-secret settings: ") != "CONNECT")
         { Console.WriteLine("Connection setup cancelled. Existing settings are unchanged."); return 1; }
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        Console.WriteLine("Connecting to central status. A sleeping host may take up to two minutes to respond.");
         using var metadata = await Send(connection, "/v1/connection", timeout.Token);
         var info = metadata.RootElement.Deserialize<ConnectionInfo>(Json) ?? throw new InvalidDataException();
         if (info.Version != 1 || info.CippOrigin != instance.BaseUrl || info.PartnerTenantId != instance.PartnerTenantId) throw new InvalidDataException();
@@ -76,6 +79,7 @@ internal sealed class CippStatus : IDisposable
         var connection = Load(invitation.InstanceId, instance);
         if (connection is null) { NotConfigured(); return 1; }
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        Console.WriteLine("Reading central status. A sleeping host may take up to two minutes to respond.");
         var status = await Read(connection, invitation.RelationshipId, timeout.Token);
         Show(status, instance);
         return status.Status is "running" or "succeeded" ? 0 : 1;
@@ -90,6 +94,7 @@ internal sealed class CippStatus : IDisposable
         try
         {
             Console.WriteLine("Watching central status for CIPP onboarding start (up to 20 minutes, including staff sign-in). Ctrl+C stops only this watch. No approval or job is submitted.");
+            Console.WriteLine("The first status request may take up to two minutes while the host starts.");
             for (var attempt = 0; attempt < 40; attempt++)
             {
                 var status = await Read(connection, invitation.RelationshipId, stop.Token);
@@ -126,6 +131,7 @@ internal sealed class CippStatus : IDisposable
             {
                 HttpStatusCode.Unauthorized => "Staff authentication rejected. Check central app IDs and restart the companion to sign in again.",
                 HttpStatusCode.Forbidden => "Staff access denied. Ask the administrator to verify your Onboarding.Read role and desktop app permission.",
+                HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout => "Central host is starting or unavailable. Wait and check status again; do not repeat GDAP approval.",
                 HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable => "Central status unavailable or rate limited. Wait at least " +
                     Math.Ceiling(Math.Clamp((response.Headers.RetryAfter?.Delta ?? response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow ?? TimeSpan.FromSeconds(60)).TotalSeconds, 1, 3600)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " seconds before checking again. No retry was submitted.",
                 _ when code >= 300 && code < 400 => "Redirect refused. Configure the central HTTPS address, not a portal sign-in URL.",

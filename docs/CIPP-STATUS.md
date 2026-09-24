@@ -7,6 +7,9 @@ No Azure resources or live staff/CIPP authentication have been verified or
 deployed. No custom CIPP build, webhook modification or new onboarding job is
 needed. Customer acceptance is unchanged. Azure's generated HTTPS origin is the
 initial companion address; `cippapi.fizlian.dev` is optional later.
+The lower-cost revision uses HTTP scale-to-zero and a public GHCR image, not
+paid ACR. Retained companion logs require an explicit decision; CIPP's existing
+onboarding logs are unaffected. Previous five-resource previews are superseded.
 
 ## Architecture and access scope
 

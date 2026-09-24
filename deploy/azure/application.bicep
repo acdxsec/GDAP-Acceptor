@@ -5,7 +5,7 @@ targetScope = 'resourceGroup'
 param namePrefix string = 'gdap-status'
 param location string = resourceGroup().location
 
-@description('Digest of the tested gdap-status image built in this deployment registry (sha256: plus 64 hex characters).')
+@description('Digest of an approved, anonymously pullable ghcr.io/acdxsec/gdap-acceptor-status image (sha256: plus 64 hex characters).')
 @minLength(71)
 @maxLength(71)
 param imageDigest string
@@ -23,12 +23,6 @@ param cippClientSecret string
 @description('Change on secret/settings rotation to force a new revision; not a secret.')
 param configurationVersion string = '1'
 
-resource registry 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = {
-  name: 'gdap${uniqueString(resourceGroup().id, namePrefix)}'
-}
-resource imageReader 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: '${namePrefix}-image-reader'
-}
 resource environment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
   name: '${namePrefix}-environment'
 }
@@ -37,19 +31,12 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
   name: namePrefix
   location: location
   tags: { application: 'gdap-acceptor-status', deployment: 'companion-only' }
-  identity: {
-    type: 'UserAssigned'
-    userAssignedIdentities: { '${imageReader.id}': {} }
-  }
   properties: {
     environmentId: environment.id
     workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       maxInactiveRevisions: 3
-      // Managed identity is used by the platform for image pulls, not exposed
-      // to application code as a general-purpose Azure credential.
-      identitySettings: [{ identity: imageReader.id, lifecycle: 'None' }]
       ingress: {
         external: true
         targetPort: 8080
@@ -57,7 +44,6 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
         allowInsecure: false
         traffic: [{ latestRevision: true, weight: 100 }]
       }
-      registries: [{ server: registry.properties.loginServer, identity: imageReader.id }]
       secrets: [
         // Public configuration identifiers. secureObject protects deployment
         // input, and this conversion preserves JSON in the mounted file.
@@ -70,7 +56,7 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
       containers: [
         {
           name: 'status'
-          image: '${registry.properties.loginServer}/gdap-status@${imageDigest}'
+          image: 'ghcr.io/acdxsec/gdap-acceptor-status@${imageDigest}'
           resources: { cpu: json('0.25'), memory: '0.5Gi' }
           env: [{ name: 'GDAP_CONFIGURATION_VERSION', value: configurationVersion }]
           volumeMounts: [
@@ -87,7 +73,11 @@ resource app 'Microsoft.App/containerApps@2025-01-01' = {
           }]
         }
       ]
-      scale: { minReplicas: 1, maxReplicas: 1 }
+      scale: {
+        minReplicas: 0
+        maxReplicas: 1
+        rules: [{ name: 'http', http: { metadata: { concurrentRequests: '10' } } }]
+      }
       volumes: [
         {
           name: 'settings'

@@ -14,6 +14,10 @@ the 0.3.0 per-workstation API credential model. It is not in the published 0.1.6
 download and is not deployed. See [Azure deployment](docs/AZURE-DEPLOYMENT.md)
 and [staff/CIPP authentication setup](docs/CIPP-STATUS.md). Azure's generated
 HTTPS address is sufficient initially; the custom hostname is optional.
+The revised Azure deployment scales to zero when idle and pulls an approved
+GHCR image; it creates no paid Azure registry or registry-pull identity. Retained
+companion logs are an explicit choice. The earlier five-resource foundation
+preview is superseded; do not deploy its old downloaded template.
 
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,

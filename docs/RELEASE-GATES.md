@@ -132,7 +132,7 @@ unchanged; new development packages must be identified separately.
 Development source replaces per-workstation CIPP secrets with public-client staff
 sign-in to an independent central service. The user confirmed Azure in CIPP's
 existing subscription/resource group, superseding the earlier Ubuntu/Docker plan.
-Separate Container Apps/registry deployment templates are prepared; CIPP remains
+Separate scale-to-zero Container Apps/GHCR deployment templates are prepared; CIPP remains
 unchanged. No public host/DNS/firewall, Azure resource or CIPP configuration was
 changed. No image or new public release was published.
 
@@ -141,6 +141,15 @@ deployment-contract checks and all four existing server HTTP contract groups
 pass. CI now includes the template checks, but this change has not been run in
 remote CI. Target-subscription what-if/policy/quota checks, remote image build,
 Azure runtime mounts/TLS and real staff/CIPP authentication remain unverified.
+
+The later cost revision removes ACR and its pull identity/role, makes historical
+logging an explicit choice and changes the replica range to zero through one.
+The user's B2 plan has one instance but peaked at 95% memory over seven days;
+sharing CIPP compute is not selected. A manual/main-only GHCR publishing workflow
+is prepared but not executed; image publication and public visibility require
+approval. The desktop status timeout is now two minutes, and a 45-second mock
+response succeeds without retry. This does not establish live Azure cold-start
+latency. Existing public desktop releases are not changed by source edits.
 
 Local companion regression and central HTTP tests pass with synthetic credentials,
 real JWT middleware and isolated upstream responses. The image builds, runs non-root

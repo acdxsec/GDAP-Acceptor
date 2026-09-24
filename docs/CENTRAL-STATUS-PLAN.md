@@ -19,7 +19,8 @@ The 0.3.0 workstation connector is not this implementation.
 
 User confirmed Azure hosting in the same subscription and resource group as
 CIPP, superseding the earlier Ubuntu Docker host. Deploy a separate Container
-App, environment, private registry, pull identity and log workspace. No CIPP app,
+App and environment with optional retained logging. Use an approved public GHCR
+image and scale from zero to one replica, without ACR or a pull identity. No CIPP app,
 plan, source or image changes. Start with Azure's HTTPS origin; custom hostname
 `cippapi.fizlian.dev` is optional. Subscription/resource-group identifiers and live
 identity configuration remain deployment inputs, not inferred from the portal URL.
@@ -37,8 +38,8 @@ expiry, delegated scope, role and authorized desktop client at the central host.
 Store the CIPP client secret as an Azure Container Apps secret mounted as a file.
 Keep CIPP API origin, authentication tenant, client ID, scope and partner binding
 in administrator-controlled configuration, never in HTTP request parameters.
-The registry-pull managed identity has only registry-scoped AcrPull. Protect
-Azure secret-reading permissions; no CIPP credential is placed on workstations.
+There is no registry credential for an approved public image. Protect Azure
+secret-reading permissions; no CIPP credential is placed on workstations.
 
 Workstation IP allowlisting is not required for CIPP. If CIPP IP restrictions
 are enabled, first design stable Azure egress. The basic templates do not create

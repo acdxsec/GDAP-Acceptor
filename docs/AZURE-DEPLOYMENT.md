@@ -1,159 +1,176 @@
-# Azure companion deployment
+# Lower-cost Azure companion deployment
 
-Selected target: **the same Azure subscription and existing resource group as
-CIPP, but separate resources**. This supersedes the Ubuntu-server plan. These
-templates have not been deployed. Nothing here moves, rebuilds or changes CIPP.
+Target: the existing CIPP subscription and **CIPP-Resorces** resource group,
+North Central US, but **separate compute**. The B2 CIPP plan's operator-supplied
+seven-day metrics showed CPU averaging 6.74% (highest minute 82%) and memory
+averaging 69.91% (highest minute 95%). Sharing that plan is not the selected
+design. These templates do not resize it or change CIPP.
 
-## What is created
+This revision supersedes the always-running ACA/paid-ACR proposal. **Do not use
+the earlier downloaded foundation template or creation command.** No Azure
+deployment, public image or package visibility change has been performed by
+preparing these files. See [cost research](research/AZURE-HOSTING-COST.md).
 
-`deploy/azure/foundation.bicep` creates a Basic Azure Container Registry (admin
-passwords disabled), registry-scoped AcrPull managed identity, Consumption
-Container Apps environment, and a separate 30-day Log Analytics workspace.
-`deploy/azure/application.bicep` creates the companion Container App after the
-image exists. Only the companion is changed by later application deployments.
+## Resources and logging decision
 
-Use **Incremental**, never Complete, deployment mode in the shared resource
-group. Review what-if and name collisions before creation. Default names start
-with `gdap-status`; the registry name is deterministically derived from the
-resource group/prefix. Do not repurpose an existing resource with those names.
-Never delete the CIPP resource group to uninstall this service.
+Foundation: one Consumption Container Apps environment, plus an optional
+Log Analytics workspace. Application: one Container App. The full design has
+**two resources without retained logs, or three with retained logs**. No Azure
+Container Registry, registry-pull identity, role assignment, new App Service
+plan, VNet, NAT gateway or Caddy host is created.
 
-Azure terminates HTTPS on its generated `*.azurecontainerapps.io` address. No
-Ubuntu machine, SSH, Caddy, ports on your workstation, custom DNS or manual copy
-to a server is needed. `cippapi.fizlian.dev` can be bound later, after the Azure
-endpoint works. Desktop setup accepts the Azure origin instead of its old default.
+The retainLogs boolean is required, with no default:
 
-The existing non-root server image and file configuration are unchanged. Settings
-and the dedicated CIPP credential are mounted from Container Apps secrets at
-`/config/settings.json` and `/run/secrets/cipp-client-secret`. The credential is
-a secure ARM input, never an output, environment variable, image layer or desktop
-setting. Limit Azure roles that can list secrets or change containers/identities.
-Registry credentials are replaced by managed identity, not the CIPP API credential.
+- true: dedicated workspace with 30-day retention; ingestion and retention can
+  incur charges. Restrict access to staff object IDs in audit records.
+- false: destination none; live streaming remains available, but no historical
+  companion access/console logs are retained by this deployment.
+  Existing CIPP onboarding logs are not disabled or changed.
 
-The app uses 0.25 vCPU / 0.5 GiB and one minimum/maximum replica, Single revision
-mode. Rolling revision replacement can temporarily overlap processes; the
-in-memory cache/rate limits are not distributed. Do not scale out. Platform
-isolation is not the same as Compose's read-only-root/cap-drop configuration.
-Health probes measure only process liveness, not CIPP permissions/readiness.
+Choose deliberately. When updating an environment, review its existing logging
+requirement before disabling retention. Incremental mode does not remove old
+registry/identity/workspace resources removed from the template. If the earlier
+foundation was deployed, inventory exact resources and obtain explicit cleanup
+approval; the new template does not stop their charges. Never delete the shared
+CIPP resource group.
 
-These are **additional billable resources**, not use of CIPP's App Service plan.
-Estimate regional registry, running app, log ingestion/retention and build costs
-before deployment. No fixed-price or free-tier assumption is made. Keep staff
-object IDs in audit logs access-controlled. No ingress/access-log diagnostic
-settings are enabled by these templates; review any organization-wide policies.
+The public, code-only image is ghcr.io/acdxsec/gdap-acceptor-status, pinned by
+an approved SHA-256 digest. A public repository does not make its GHCR package
+public automatically. **Do not deploy until anonymous digest pull works.**
+The image contains server/shared source output, not configuration, credentials
+or customer browser state. The CIPP credential stays in Azure secrets.
 
-## Inputs still required
+## Runtime and cost boundaries
 
-- CIPP's Azure subscription ID, existing resource group, and supported deployment
-  region. Resource-group location is the default, not proof of CIPP app location.
-- The two staff Entra applications and assigned staff role from
-  [CIPP status setup, section 1](CIPP-STATUS.md#1-staff-identity-setup-administrator-once).
-- Dedicated read-only CIPP API client details from section 2 of that guide.
-  Confirm API origin/auth tenant/scope from CIPP; do not infer from the portal URL.
-- Confirmation of CIPP API IP restrictions. The simple template has **no fixed
-  outbound IP**. If restrictions are required, stop and prepare a separate
-  VNet/NAT design; do not allow the earlier Ubuntu IP or Azure ingress IP.
+The app uses 0.25 vCPU / 0.5 GiB, HTTP ingress, minimum zero, maximum one and
+Single revision mode. Its HTTP rule wakes it on demand. It does not reuse CIPP
+memory. Platform maintenance or revision replacement may briefly overlap
+processes; caches/cooldowns/rate limits remain process-local, not distributed.
 
-Deployment needs resource creation and registry build permissions plus permission
-to create the registry-scoped role assignment (Contributor alone is insufficient).
-Microsoft.App, Microsoft.ContainerRegistry, Microsoft.ManagedIdentity and
-Microsoft.OperationalInsights providers must be registered, with appropriate
-regional quota and no conflicting policy. Do not broaden permissions silently.
+Azure supplies a generated HTTPS origin; custom DNS is not needed initially.
+cippapi.fizlian.dev is optional later. The server still validates staff tokens.
+Anonymous /healthz reports process liveness only. The image remains non-root;
+platform isolation is not identical to Compose read-only-root/cap-drop settings.
+
+Zero replicas incur no app resource-consumption charge; startup, processing
+and scale-in delays consume resources. External monitoring or unauthorized
+traffic can keep it warm. An application rate limiter does not stop ingress
+from starting the container and is not a spending cap. Do not add keep-alive
+polling just to hide cold starts. GHCR storage/bandwidth is currently free;
+builds, retained logs, networking and offer terms can still affect total cost.
+Verify Sponsorship eligibility/credits; no $0/month guarantee is made.
+
+The updated desktop allows two minutes per status HTTP request, within its
+existing five-minute setup/check and twenty-minute watch deadlines. A timeout
+or gateway error fails clearly: it never retries approval, resubmits a CIPP job
+or changes successful acceptance. A synthetic 45-second response tests the old
+timeout regression, not actual Azure cold-start latency. Live validation is
+still required. Process restarts discard cached CIPP tokens/results and limits.
+
+## Remaining inputs
+
+- Staff API/desktop Entra registrations, assigned Onboarding.Read role and
+  dedicated read-only CIPP API client: [identity setup](CIPP-STATUS.md).
+- CIPP API origin/authentication tenant/client/scope copied from CIPP, not
+  inferred from the portal URL.
+- Explicit logging choice and an approved public image digest.
+- CIPP API IP restrictions. This minimal design has no fixed egress address.
+  Mandatory allowlisting needs a separately priced network design. Neither
+  the old Ubuntu IP nor Azure ingress IP is an egress promise.
+
+Deployment permissions cover these resources and deployments; no registry-build
+or role-assignment write permission is needed by these templates. Register
+Microsoft.App and, for retained logging, Microsoft.OperationalInsights. Merely
+registering ACR/ManagedIdentity earlier did not create resources. Check regional
+quota and Azure policy.
+
+## Build and publish (separate approval)
+
+The publish-status-image workflow is manual, main-branch only, and requires
+publish_approved=true. It runs server contracts, builds server/Dockerfile,
+smoke-tests that exact image, then pushes a unique source/run/attempt tag to
+GHCR using a job-scoped GitHub token. The run summary records the image digest.
+It does not deploy Azure, create a GitHub release or change package visibility.
+Normal push/PR verification does not publish. The Docker build context excludes
+settings and secrets.
+
+Before running it, approve publishing the source-only image and merge tested,
+reviewed source. The owner must deliberately approve public package visibility
+if it is private; visibility is not changed automatically. Verify an anonymous
+pull and use the recorded digest in application.parameters.local.json. Never
+deploy latest or a mutable tag. Reruns do not move earlier build tags.
 
 ## Deployment sequence
 
-Use an authenticated Azure CLI environment or Azure Cloud Shell with this source
-checkout. Local Docker is unnecessary: **ACR builds the image in Azure** using
-the existing `server/Dockerfile`. The `.dockerignore` limits the uploaded build
-context to server/shared source, excluding local settings and credentials.
-Use a reviewed source revision containing these templates; they are not in
-the published 0.1.6 release or the earlier Ubuntu server bundle.
+These are reference commands, not executed by validation. Use a reviewed source
+checkout in Azure Cloud Shell or an authenticated Azure CLI. Replace placeholders.
+Keep subscription/group/prefix/region consistent. Always use Incremental mode
+and inspect what-if for collisions/unrelated changes. No command contains a secret.
 
-The following are operator reference commands, **not executed by validation**.
-Replace angle-bracket values and use the same subscription/group/prefix/region
-at every stage. No command contains a secret value.
-
-1. Preview the new foundation. Stop if any existing non-companion resource changes.
+1. Preview the revised foundation with the logging choice. Without retained
+   logs, expect one resource to create, not the earlier five.
 
 ```bash
-az deployment group what-if --subscription '<subscription-id>' --resource-group '<cipp-resource-group>' --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location='<azure-region>' --mode Incremental
+az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resorces --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental
 ```
 
-2. After approving costs/changes, create the foundation.
+2. Only after reviewing the preview and cost choice, create the foundation.
 
 ```bash
-az deployment group create --subscription '<subscription-id>' --resource-group '<cipp-resource-group>' --name gdap-status-foundation --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location='<azure-region>' --mode Incremental --query properties.outputs
+az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resorces --name gdap-status-foundation --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental --query properties.outputs
 ```
 
-3. Use the returned registryName to build a uniquely tagged source revision. The
-   build context is the repository root, not `deploy/azure`. Never reuse a tag
-   for a different build. ARM-audience ACR authentication is enabled for managed
-   identity image pull. Allow role-assignment propagation before app deployment.
+3. Make a protected copy of application.parameters.example.json named
+   application.parameters.local.json in deploy/azure. Restrict file/directory
+   access (0600 on Linux; equivalent Windows ACL). In a secure editor supply
+   the approved image digest, matching prefix/region, configuration and CIPP
+   secret. Never put the credential in chat, CLI arguments, shell variables,
+   environment, Git or transcripts. Local parameter files are gitignored but
+   plaintext: protect backups too. ARM secure inputs protect deployment history,
+   not the local file. Do not enable CLI debug logging.
+
+4. Preview the app. Secret diffs are not a reliable security audit; review
+   permissions and configuration too. Do not share raw secret-bearing output.
 
 ```bash
-az acr build --subscription '<subscription-id>' --registry '<registryName>' --image gdap-status:<source-revision> --file server/Dockerfile .
+az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resorces --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
 ```
 
-4. Resolve the image digest; deployment is pinned to that immutable image.
+5. After approval, deploy and obtain the generated HTTPS origin.
 
 ```bash
-az acr repository show --subscription '<subscription-id>' --name '<registryName>' --image gdap-status:<source-revision> --query digest --output tsv
+az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resorces --name gdap-status-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
 ```
 
-5. In a private working directory, make a protected copy of
-   `deploy/azure/application.parameters.example.json` named
-   `deploy/azure/application.parameters.local.json`. Restrict it to the operator
-   (0600 on Linux; equivalent Windows ACL), including its parent directory and
-   backups. Complete it with a secure editor: exact digest, matching region/prefix,
-   configuration and CIPP secret. Never paste credentials into chat, CLI arguments,
-   shell variables/environment, terminal transcripts or source control. Local
-   parameter files are gitignored. ARM secure parameters protect deployment
-   history, **not this local plaintext file**. Do not enable CLI debug logging.
+The unchanged server file contract mounts settings at /config/settings.json
+and the CIPP secret at /run/secrets/cipp-client-secret. Restrict Azure roles
+that can list secrets or change containers. Remove the local plaintext parameter
+file after storing the credential securely. Never delete the shared group on failure.
 
-6. Preview the app. Secret differences are not a reliable what-if audit; inspect
-   the template and access permissions too. Do not share raw deployment output.
+## Live checks and upgrades
 
-```bash
-az deployment group what-if --subscription '<subscription-id>' --resource-group '<cipp-resource-group>' --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
-```
+Verify /healthz returns 200, anonymous /v1/connection returns 401, assigned
+staff can connect and unassigned users are denied. Use the generated origin in
+desktop settings 3 → C, replacing its old custom-host default. Check an already
+approved invitation through menu 5; do not repeat customer approval.
+Leave it idle until zero replicas and test an actual cold-start status read.
+Confirm cancellation/timeouts leave approval unchanged and inspect actual costs.
 
-7. Create the companion and obtain its HTTPS origin. CIPP itself is not a resource
-   in either template.
+Deploy new tested digests without touching CIPP. Increment configurationVersion
+when rotating settings/secrets to replace the process and clear cached tokens.
+Verify before revoking old credentials. Roll back with the previous approved
+digest and compatible settings. No automatic updater is added.
 
-```bash
-az deployment group create --subscription '<subscription-id>' --resource-group '<cipp-resource-group>' --name gdap-status-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
-```
+## Verification and primary sources
 
-If deployment fails, inspect this deployment/revision, not CIPP. Do not delete the
-shared resource group or disable authentication. Preserve the secure credential
-in an approved secret store and remove the local parameter copy after use.
+Test-AzureDeployment.ps1 compiles both templates and checks the absence of ACR/
+identity/role assignments, mandatory logging choice, optional workspace, HTTP
+scale-to-zero, one-replica limit, GHCR digest pinning, secure inputs and mounts.
+These tests do not replace live quota/policy, anonymous image pull, runtime
+mount, staff authentication or cold-start validation.
 
-## Live gate and upgrades
-
-Check `/healthz` returns 200 and anonymous `/v1/connection` returns 401. Then
-connect the 0.4.0 companion (settings **3 → C**) using the returned origin and
-staff application IDs. Check an **already-approved invitation** through menu 5.
-Verify authorized access, unassigned-user denial and a matching CIPP status.
-This does not repeat customer approval or submit another onboarding job.
-
-For updates build a new unique tag, record/test its digest, preview and deploy
-only `application.bicep` with the new digest. For settings/credential rotation,
-also increment `configurationVersion` to force process replacement and clear
-cached tokens; app-level secret changes alone are not sufficient. Verify before
-revoking the old CIPP credential. Rollback by deploying the previous approved
-digest and compatible configuration, not by modifying CIPP. No automatic
-updater, public image, GitHub deployment identity or Azure deployment is created
-by these source changes.
-
-## Verification and sources
-
-`tools/Test-AzureDeployment.ps1` compiles both templates and checks resource
-scope, secret parameters/mounts, image pinning, HTTPS, identity access and replica
-limits. CI runs it without Azure authentication. Compilation is **not** an Azure
-what-if, policy/quota check, actual image build, secret-mount runtime check or live
-authentication test. Those gates remain pending in the target subscription.
-
-- [Azure Container Apps ingress and TLS](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview)
-- [Managed identity image pulls](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull)
-- [Secret volumes and rotation](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
-- [Build images in ACR without local Docker](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-quickstart-task-cli)
+- [Scaling and billing behavior](https://learn.microsoft.com/en-us/azure/container-apps/scale-app)
+- [Logging options](https://learn.microsoft.com/en-us/azure/container-apps/log-options)
+- [GHCR access](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+- [GitHub package billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
+- [Azure secret handling](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
