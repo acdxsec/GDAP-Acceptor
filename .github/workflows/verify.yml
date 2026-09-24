@@ -16,6 +16,11 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Authenticated central HTTP contracts
         run: dotnet run --project tests/ServerContracts
+      - name: Install pinned Azure template compiler (no deployment)
+        run: az bicep install --version v0.47.16
+      - name: Validate Azure resource and security contracts (offline)
+        shell: pwsh
+        run: ./tools/Test-AzureDeployment.ps1 -BicepPath "$HOME/.azure/bin/bicep"
       - name: Build central Docker image
         run: docker build --tag gdap-status:0.4.0 --file server/Dockerfile .
       - name: Isolated central container smoke test

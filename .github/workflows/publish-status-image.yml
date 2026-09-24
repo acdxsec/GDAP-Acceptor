@@ -1,0 +1,52 @@
+name: Publish approved status image to GHCR
+on:
+  workflow_dispatch:
+    inputs:
+      publish_approved:
+        description: 'I authorize publishing this main-branch source image to GHCR (no Azure deployment).'
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: publish-status-image
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && inputs.publish_approved
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/acdxsec/gdap-acceptor-status
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify authenticated server contracts
+        run: dotnet run --project tests/ServerContracts
+      - name: Build source-only image locally on the runner
+        run: docker build --label org.opencontainers.image.source=https://github.com/acdxsec/GDAP-Acceptor --label org.opencontainers.image.revision="$GITHUB_SHA" --tag gdap-status:0.4.0 --file server/Dockerfile .
+      - name: Verify this exact image before publishing
+        shell: pwsh
+        run: ./tools/Test-ServerContainer.ps1
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish unique build tag and record digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Unique even on rerun; never move a previous deployment's tag.
+          image_tag="sha-$GITHUB_SHA-run-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag gdap-status:0.4.0 "$IMAGE:$image_tag"
+          docker push "$IMAGE:$image_tag"
+          docker inspect "$IMAGE:$image_tag" --format '{{join .RepoDigests "\n"}}' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Package visibility is not changed by this workflow. An owner must approve public access and anonymous digest pull must be verified before Azure deployment.' >> "$GITHUB_STEP_SUMMARY"

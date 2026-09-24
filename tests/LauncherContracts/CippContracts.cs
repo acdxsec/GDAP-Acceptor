@@ -57,7 +57,7 @@ internal static class CippContracts
         Assert(result.Code != 0, "Duplicate response keys accepted");
         peer.Override = null;
         Console.WriteLine("PASS: exact relationship/partner/CIPP binding, status distinctions, duplicate and stale-evidence rejection");
-        foreach (var code in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.TooManyRequests, HttpStatusCode.ServiceUnavailable, HttpStatusCode.Redirect })
+        foreach (var code in new[] { HttpStatusCode.Unauthorized, HttpStatusCode.Forbidden, HttpStatusCode.TooManyRequests, HttpStatusCode.ServiceUnavailable, HttpStatusCode.BadGateway, HttpStatusCode.GatewayTimeout, HttpStatusCode.Redirect })
         {
             peer.Code = code;
             var before = peer.Calls.Count;
@@ -68,6 +68,14 @@ internal static class CippContracts
         }
         peer.Code = HttpStatusCode.OK;
         peer.Status = "running";
+        // Real elapsed delay crosses the old 40-second timeout. Do not use a
+        // shortened test-only timeout that cannot catch that regression.
+        peer.ResponseDelay = TimeSpan.FromSeconds(45);
+        var beforeColdStart = peer.Calls.Count;
+        result = await Launch(state, ["cipp", "status", url], "", connector);
+        Assert(result.Code == 0 && result.Output.Contains("sleeping host") && peer.Calls.Count == beforeColdStart + 1, "Cold-start status timed out or retried");
+        peer.ResponseDelay = TimeSpan.Zero;
+        Console.WriteLine("PASS: delayed cold-start status succeeds past 40 seconds without retry or approval; gateway errors remain fail-closed");
         result = await Launch(state, [], $"5\n{url}\n\n0\n", connector);
         Assert(result.Output.Contains("CIPP onboarding: running"), "Guided status check failed");
         var calls = 0;
@@ -140,17 +148,19 @@ internal static class CippContracts
         internal string Status = "waiting";
         internal string? Override;
         internal HttpStatusCode Code = HttpStatusCode.OK;
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        internal TimeSpan ResponseDelay;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
             Assert(request.Method == HttpMethod.Get && request.RequestUri?.Host == "cippapi.fizlian.dev" && request.Headers.Authorization?.ToString() == "Bearer synthetic-staff-token", "Unexpected destination, method or credential");
             Calls.Add(request.Method + " " + request.RequestUri);
+            if (ResponseDelay > TimeSpan.Zero) await Task.Delay(ResponseDelay, token);
             var json = Code != HttpStatusCode.OK ? "PRIVATE_SECRET" : request.RequestUri!.AbsolutePath == "/v1/connection"
                 ? JsonSerializer.Serialize(new ConnectionInfo(1, "https://cipp.example", Partner))
                 : Override ?? JsonSerializer.Serialize(new OnboardingStatus(1, "https://cipp.example", Partner, "relationship-1", Status, DateTimeOffset.UtcNow));
             var response = new HttpResponseMessage(Code) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
             response.Headers.Location = new Uri("https://attacker.example");
             response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(90));
-            return Task.FromResult(response);
+            return response;
         }
     }
 }

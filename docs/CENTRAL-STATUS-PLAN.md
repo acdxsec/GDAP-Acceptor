@@ -17,10 +17,13 @@ The 0.3.0 workstation connector is not this implementation.
 
 ## Hosting and access
 
-User selected an existing Ubuntu Docker server and public hostname
-`cippapi.fizlian.dev`, independent of CIPP's source, image and deployment.
-The user does not believe a reverse proxy is already installed; include optional
-Caddy HTTPS handling, but check existing listeners before deployment.
+User confirmed Azure hosting in the same subscription and resource group as
+CIPP, superseding the earlier Ubuntu Docker host. Deploy a separate Container
+App and environment with optional retained logging. Use an approved public GHCR
+image and scale from zero to one replica, without ACR or a pull identity. No CIPP app,
+plan, source or image changes. Start with Azure's HTTPS origin; custom hostname
+`cippapi.fizlian.dev` is optional. Subscription/resource-group identifiers and live
+identity configuration remain deployment inputs, not inferred from the portal URL.
 Use single-tenant Entra authentication; authorize an explicitly assigned staff
 group through an application role. Authorized staff are allowed to inspect
 all relationships for the configured partner, not only their own approvals.
@@ -32,15 +35,16 @@ approval browser. No shared desktop secret, anonymous status endpoint or trust
 in caller-supplied identity headers. Validate token signature, issuer, audience,
 expiry, delegated scope, role and authorized desktop client at the central host.
 
-Store the CIPP client secret centrally in a protected, read-only Docker secret
-file. Keep CIPP API origin, authentication tenant, client ID, scope and partner
-binding in administrator-controlled configuration, never in request parameters.
-No Azure hosting, managed identity or Key Vault is required for this deployment.
-File-backed Compose secrets are not encrypted storage; protect the host and backups.
+Store the CIPP client secret as an Azure Container Apps secret mounted as a file.
+Keep CIPP API origin, authentication tenant, client ID, scope and partner binding
+in administrator-controlled configuration, never in HTTP request parameters.
+There is no registry credential for an approved public image. Protect Azure
+secret-reading permissions; no CIPP credential is placed on workstations.
 
 Workstation IP allowlisting is not required for CIPP. If CIPP IP restrictions
-are enabled, allow the Ubuntu host's actual public egress address. Do not infer
-outbound identity from DNS or provision any Azure network resources.
+are enabled, first design stable Azure egress. The basic templates do not create
+a VNet/NAT gateway and do not promise a fixed outbound address. Do not use the
+previous Ubuntu IP or infer outbound identity from the service's ingress address.
 
 ## Implementation slices and test interfaces
 
@@ -72,5 +76,6 @@ non-root/read-only startup and anonymous rejection on the packaged image.
 ## Primary references
 
 - [Desktop interactive authentication](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-acquire-token-interactive)
-- [Docker deployment and setup](CIPP-STATUS.md)
+- [Azure deployment](AZURE-DEPLOYMENT.md)
+- [Staff/CIPP identity setup](CIPP-STATUS.md)
 - [CIPP authentication evidence](research/CIPP-STATUS-AUTH.md)
