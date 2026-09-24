@@ -1,0 +1,8 @@
+**
+!server/
+!server/**
+!shared/
+!shared/**
+**/bin/
+**/obj/
+**/*.user

@@ -69,12 +69,13 @@ internal static class GuidedConsole
                     foreach (var item in instances.OrderBy(pair => pair.Key))
                         Console.WriteLine($"{Text(item.Value.BaseUrl)} | Partner: {Text(item.Value.PartnerTenantId)}");
                     Console.WriteLine("These settings do not configure CIPP Automated Onboarding or store customer credentials.");
-                    Console.WriteLine("A. Add a trusted CIPP origin | C. Configure read-only API access | D. Disconnect local API credential");
+                    Console.WriteLine("A. Add a trusted CIPP origin | C. Connect central status | D. Disconnect central settings | L. Remove legacy local API credential");
                     Console.Write("Choose a settings action, or Enter to return: ");
                     var setting = Console.ReadLine()?.Trim().ToLowerInvariant();
                     if (setting == "a") lastCode = await execute(["configure"]);
                     else if (setting == "c") lastCode = await execute(["cipp", "configure"]);
                     else if (setting == "d") lastCode = await execute(["cipp", "disconnect"]);
+                    else if (setting == "l") lastCode = await execute(["cipp", "remove-legacy-credential"]);
                     lastAction = "Settings finished. No customer authentication was started.";
                 }
                 catch

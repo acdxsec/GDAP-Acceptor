@@ -1,0 +1,51 @@
+name: gdap-status
+services:
+  status:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    image: gdap-status:0.4.0
+    restart: unless-stopped
+    # Only the HTTPS reverse proxy should expose this to the internet.
+    ports:
+      - "127.0.0.1:5080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    volumes:
+      - ./settings.json:/config/settings.json:ro
+    secrets:
+      - source: cipp_secret
+        target: cipp-client-secret
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  # Optional: omit this profile if a reverse proxy already owns ports 80/443.
+  edge:
+    profiles: [https]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [status]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+secrets:
+  cipp_secret:
+    file: ./secrets/cipp-client-secret
+volumes:
+  caddy_data:
+  caddy_config:

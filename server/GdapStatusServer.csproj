@@ -1,18 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>gdap-acceptor</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.0</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.90.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <ProjectReference Include="../shared/StatusProtocol.csproj" />
-    <InternalsVisibleTo Include="StateContracts" />
-    <InternalsVisibleTo Include="LauncherContracts" />
+    <InternalsVisibleTo Include="ServerContracts" />
   </ItemGroup>
 </Project>

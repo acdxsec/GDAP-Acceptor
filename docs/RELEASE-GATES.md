@@ -109,6 +109,9 @@ operator-reported menu evidence, not validation of the later CIPP connector.
 
 ## 0.3.0 read-only onboarding-status connector
 
+Historical implementation, superseded by 0.4.0's central credential model below.
+Its setup is retained in [historical 0.3.0 documentation](CIPP-STATUS-0.3.0.md).
+
 Development source adds dedicated API-client configuration, OS-vault storage,
 exact-relationship status reads and a bounded watch after verified acceptance.
 It does not change CIPP or submit onboarding tasks. A status error or cancelled
@@ -123,6 +126,29 @@ there is no plaintext fallback when it is unavailable. The current workflow's
 unchanged; new development packages must be identified separately.
 
 ## Remaining gates
+
+### 0.4.0 central status deployment
+
+Development source replaces per-workstation CIPP secrets with public-client staff
+sign-in to an independently hosted Docker module. The user supplied Ubuntu/Docker
+and `cippapi.fizlian.dev`. Caddy HTTPS deployment files are included; existing port
+usage must be checked before startup. No public host/DNS/firewall or CIPP configuration
+was changed. No image or new public release was published.
+
+Local companion regression and central HTTP tests pass with synthetic credentials,
+real JWT middleware and isolated upstream responses. The image builds, runs non-root
+with a read-only filesystem, and rejects anonymous/spoofed identity requests. This
+does not verify live Entra app registrations, staff browser sign-in, role assignment,
+CIPP credentials/permissions, actual onboarding response or public DNS/TLS.
+See [deployment setup](CIPP-STATUS.md). The 0.4.1 MSI is only an upgrade-test fixture.
+Legacy credentials are never read/uploaded; removal is explicit and remote
+revocation is a separate administrator action. Staff tokens are memory-only.
+
+The server currently supports one partner, one replica, a 4-MiB CIPP table and
+process-local 30-second read coalescing/cooldowns. Assigned staff can inspect all
+relationships in that instance. Review those limits and host secret-file permissions
+before production use. The old desktop-vault live-setup gate is superseded, not
+completed; the new host and interactive sign-in gates remain open.
 
 - In the published 0.1.5, a handled child-process approval error can clear its reservation even when the
   write outcome is uncertain. No automatic retry occurs, but the next explicit

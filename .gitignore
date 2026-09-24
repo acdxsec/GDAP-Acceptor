@@ -9,3 +9,5 @@ vendor/
 .env*
 **/bin/
 **/obj/
+deploy/settings.json
+deploy/secrets/

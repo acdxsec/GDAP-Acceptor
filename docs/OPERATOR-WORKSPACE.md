@@ -38,7 +38,11 @@ screen that would interfere with the child PowerShell's confirmation prompts.
 Tests exercise the real launcher with isolated state and a non-authenticating
 acceptance adapter, plus the real approval/wrapper subprocess contracts.
 
-## CIPP status integration: 0.2.0 boundary and 0.3.0 extension
+## CIPP status integration: historical boundary and central extension
+
+Development 0.4.0 supersedes direct workstation API access with staff sign-in to
+the central Docker host. CIPP credentials are no longer read or stored on the
+desktop. See [current setup](CIPP-STATUS.md). Acceptance remains unchanged.
 
 The section below records the original 0.2.0 boundary. Development 0.3.0 now
 implements the separate API-client connector; see [CIPP status](CIPP-STATUS.md)

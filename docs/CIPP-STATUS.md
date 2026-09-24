@@ -1,105 +1,179 @@
-# Read-only CIPP onboarding connector — 0.3.0 development
+# Central CIPP status — 0.4.0 development
 
-The companion already approves GDAP through Microsoft; Microsoft's approval event
-triggers existing CIPP Automated Onboarding. This connector only observes CIPP's
-record. It never calls `ExecOnboardTenant`, starts a job, retries a job, edits a
-webhook or modifies CIPP source. Copy/pasting the invitation remains unchanged.
+Target: **https://cippapi.fizlian.dev**, on the operator's Ubuntu Docker server.
+Source and deployment files are prepared; the public host, DNS/TLS and live
+staff/CIPP authentication have not been verified. No Azure hosting, custom CIPP
+build, webhook modification or new onboarding job is needed. Customer acceptance
+is unchanged. The optional Caddy profile provides HTTPS; first check that no
+existing proxy is using ports 80/443.
 
-## One-time setup
+## Architecture and access scope
 
-An authorized administrator must configure a dedicated API client in the existing
-CIPP **Integrations > CIPP-API** page. Create/import the client, enable it, assign
-the least-privileged custom read role, set appropriate allowed IPs, and use Save
-to Azure as required by your deployment. This changes API-client configuration,
-not onboarding behavior. The companion does not perform those administrative
-actions. No live API client was created or verified during implementation.
+The companion approves GDAP in a fresh customer browser. Microsoft's webhook
+triggers existing CIPP onboarding. Separately, the companion authenticates an
+authorized **staff** member to the central host. That host reads CIPP with one
+dedicated credential and returns only the exact relationship's status,
+observation time and configured CIPP/partner identity—not the full table or logs.
 
-The endpoint requires `Tenant.Administration.Read`. That category can authorize
-other reads: use CIPP's endpoint restrictions for unnecessary endpoints and
-verify the effective role. Do not grant write categories or SuperAdmin for this
-connector. The endpoint returns the entire onboarding table; client-side matching
-is **not** server-enforced customer isolation.
+One CIPP instance/partner is configured per server. Assigned staff can read
+status for **any relationship in that instance**, not only their own approvals.
+This is not customer-facing access. Possession of an invitation grants no access.
 
-In the companion choose **3. CIPP connection settings**, then **C. Configure
-read-only API access**. Select the enrolled CIPP instance if there is more than one.
-Enter the API URL, authentication tenant ID, application/client ID and API scope
-from CIPP. The API URL may differ from the portal's browser URL; use the displayed
-API origin, optionally ending in `/api`. Other paths, queries and credentials in
-URLs are rejected. This implementation targets public-cloud Entra authentication
-at `login.microsoftonline.com`; sovereign clouds require a separate reviewed flow.
+## 1. Staff identity setup (administrator, once)
 
-Review the destinations and type `CONNECT`, then enter the API secret at the
-hidden terminal prompt. The secret cannot be supplied in a CLI argument, an
-environment variable or redirected input. Escape cancels secret entry. The
-companion obtains an OAuth client-credentials token and tests only
-`GET /api/ListTenantOnboarding`. It saves the connection only after successful
-authentication and a JSON-array response. Failed verification leaves the existing
-saved connection intact. A successful read does not prove the credential lacks
-write permissions; least privilege must be configured in CIPP.
+Use your staff Entra tenant; this need not be CIPP's authentication tenant.
+Register two single-tenant applications. Neither needs a desktop client secret.
 
-The normal settings file still contains no API secret. The entire connection
-(including its origin/partner binding and secret) lives in the current user's
-credential vault: Windows Credential Manager or the desktop Secret Service via
-`/usr/bin/secret-tool`. The latter requires `secret-tool` and a working, unlocked
-Secret Service backend. There is no plaintext-file fallback. Other software
-running as the same user may access that user's vault; this is not protection
-against a compromised workstation. Tokens are held in memory only.
+**`GDAP Status API` — resource application:**
 
-Settings **D** removes only the selected local API credential, after typing
-`DISCONNECT`. It does not disable or revoke the API client in CIPP. Reconfigure
-after rotating its secret. Removing a portal enrollment does not itself delete
-its vault entry; disconnect it first. Uninstalling does not intentionally erase
-vault entries or local enrollment.
+1. Record its directory tenant ID and application/client ID (`Audience`).
+2. Set Application ID URI to `api://<central-api-app-id>` and expose the delegated
+   scope **`Status.Read`**, with admin consent only.
+3. Set manifest `api.requestedAccessTokenVersion` to **2**.
+4. Add enabled app role **`Onboarding.Read`**, allowed member type **Users/Groups**.
+   Do not define it as an application-only permission.
+5. In this application's Enterprise Application, require assignment. Assign
+   authorized technicians, or an eligible licensed staff group, to `Onboarding.Read`.
+   Do not assign all users or customer accounts by default.
 
-## Operator behavior
+**`GDAP Acceptor Desktop` — public client:**
 
-- After verified active GDAP, the acceptance reservation is completed and its
-  lock released **before** status observation starts. CIPP errors, a timeout or
-  cancellation cannot change the successful approval result or retain its lock.
-- If configured, observe every 30 seconds for at most 40 reads / 20 minutes.
-  Ctrl+C stops this watch only. Individual HTTP requests are limited to 30 seconds.
-  OAuth tokens are refreshed in memory when needed; no status HTTP errors are
-  automatically retried. Redirects are disabled for both token and CIPP requests.
-- Match the exact relationship `RowKey`; reject duplicate matches, conflicting
-  relationship identities/partner evidence, unexpected statuses and response shapes.
-  No customer identity is inferred from a CIPP row. Customer validation remains
-  the independent Microsoft approval engine's responsibility.
-- No matching record means **waiting/unconfirmed**. `queued` and `pending` are
-  explicitly not running. `running` confirms CIPP reports onboarding in progress;
-  `succeeded`, `failed` and `cancelled` are reported as CIPP states. Observation
-  ends at a terminal result or at running; CIPP retains ongoing progress/error handling.
-- Limit expiry means running was not confirmed, not that GDAP failed. Never
-  repeat approval to refresh status. Use **5. Check CIPP onboarding** to check once
-  or watch the same invitation later, without customer sign-in or approval.
-- Errors distinguish authentication, authorization/IP restrictions, rate limiting
-  and refused redirects. Rate limiting stops the watch and displays a wait period.
-  Response bodies, bearer tokens, client secrets and CIPP log contents are not printed
-  or included in diagnostic exports. The response is bounded to 4 MiB; larger tables
-  fail safely and may require a future supported paginated endpoint.
+1. Record its application/client ID (`DesktopClientId`). Do not create a secret.
+2. Add the **Mobile and desktop applications** platform and redirect URI
+   **`http://localhost`**. MSAL uses a workstation loopback port; this is not the
+   public server URL.
+3. Add delegated permission `GDAP Status API / Status.Read`; grant admin consent.
+4. Apply the appropriate staff Conditional Access policy to the central API
+   resource. This code does not bypass MFA or device requirements.
 
-CLI equivalents: `cipp configure`, `cipp disconnect`, `cipp status <invitation-url>`,
-and `cipp watch <invitation-url>`. Status/watch return zero only for running or
-succeeded. Successful approval still returns zero even if subsequent CIPP status
-cannot be confirmed; its separate console result is authoritative for that check.
+The server validates signature, issuer, audience, expiry, tenant, v2 token version,
+delegated scope, desktop `azp`, staff `oid` and app role. Proxy identity headers
+and CIPP browser cookies are not authentication. Only `/healthz` is anonymous;
+it reports process liveness, not CIPP or Entra readiness.
 
-## Verification and limitations
+## 2. CIPP identity setup (administrator, once)
 
-Launcher contracts exercise configuration, matching, status separation, bounded
-watching, cancellation, errors, destination validation, enrollment binding and
-credential-vault failure with synthetic HTTP and credential-store adapters. On
-Windows the same launcher tests also round-trip an isolated synthetic credential
-through the real native vault, with cleanup. No customer or CIPP credentials are
-used. Linux's actual desktop Secret Service integration still requires validation
-on a configured desktop; the normal approval workflow does not depend on it.
+Create/import and enable **one dedicated CIPP API client**. Assign a custom read
+role requiring `Tenant.Administration.Read`, restrict unnecessary endpoints, and
+use Save to Azure as required by CIPP. Do not grant write categories or SuperAdmin.
+The read category can authorize other endpoints; validate effective permissions.
+The underlying CIPP endpoint returns its whole onboarding table; central projection
+does not reduce what the CIPP credential itself can read.
 
-Live verification of the deployed CIPP client/role and response remains required.
-Source/API evidence and the separately documented, unimplemented MCP/public-PKCE
-alternative are in [authentication research](research/CIPP-STATUS-AUTH.md).
-The connector does not promise that a previously authenticated CIPP browser session
-can be reused. It uses its own explicitly configured API credential.
+Copy CIPP's displayed API origin, authentication tenant, client ID and scope.
+Do not infer these from the portal URL. Only public-cloud Microsoft authentication
+is supported. If you enable CIPP IP restrictions, allow the **Ubuntu server's
+actual outbound public IP**, including NAT/VPN egress—not workstation IPs and not
+automatically the DNS address of `cippapi.fizlian.dev`. Confirm egress is stable.
+IP restrictions are optional; authentication/authorization remain mandatory.
 
-Sources: [CIPP setup/authentication](https://docs.cipp.app/api-documentation/setup-and-authentication),
-[API client management](https://docs.cipp.app/user-documentation/cipp/integrations/cipp-api),
-[onboarding read endpoint](https://github.com/KelvinTegelaar/CIPP-API/blob/c04bde0f4b53280c1ed21d838ba2c4bbcfc8a600/Modules/CIPPHTTP/Public/Entrypoints/HTTP%20Functions/Tenant/Administration/Tenant/Invoke-ListTenantOnboarding.ps1),
-[Windows credential API](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew),
-[Secret Service command](https://manpages.debian.org/testing/libsecret-tools/secret-tool.1.en.html).
+## 3. Server files and secret
+
+From the tested source root, copy `deploy/settings.example.json` to
+`deploy/settings.json` and replace every `REPLACE_` value. Confirm the prefilled
+CIPP portal and partner. Use lowercase canonical GUIDs. `CippApiOrigin` must be
+an HTTPS origin **without `/api`**. The central API app ID and desktop app ID are
+different from the CIPP API client ID.
+
+Store the CIPP secret in `deploy/secrets/cipp-client-secret` with a secure local
+editor or secret-management tool—not CLI arguments, environment entries, Git,
+chat or an image. Both local configuration and secrets are gitignored. The Docker
+build context contains only `server/` and `shared/` sources.
+
+Compose mounts it read-only at `/run/secrets/cipp-client-secret`. The app runs
+as UID/GID **1654**, which must be able to read the mounted file. With rootful
+Docker, one option is a root-owned secret directory mode `0700`, with its file
+owned by `root:1654`, mode `0440`; check host group membership. Rootless Docker
+needs permissions matching its user mapping. File-backed Compose secrets are
+protected host files/bind mounts, **not encrypted storage**. Root/Docker
+administrators can access them. Protect backups accordingly.
+
+Invalid required configuration or unreadable secrets stop startup. To rotate,
+replace the protected file and recreate/restart `status` to discard its memory
+token; revoke the old CIPP credential after verification.
+
+## 4. HTTPS and Docker launch
+
+No server or DNS changes were performed during development. Before starting:
+
+- Check listeners on the Ubuntu host: `sudo ss -ltnp '( sport = :80 or sport = :443 or sport = :5080 )'`.
+- Check containers: `docker ps --format 'table {{.Names}}\t{{.Ports}}'`.
+- If ports are already used, do not stop those services; use the existing-proxy
+  option below or choose a reviewed configuration.
+- Point the hostname's A record at the server. Set AAAA only if IPv6 works.
+  Make 80/443 reachable for Caddy's certificate handling. Keep backend 5080/8080
+  off the public internet. No ACME requests occur until the proxy is deployed.
+
+**Included HTTPS proxy:** from the source root run
+`docker compose -f deploy/compose.yml --profile https up -d --build`.
+Caddy serves `cippapi.fizlian.dev`; certificate state is in persistent named
+volumes. Do not delete those volumes during upgrades.
+
+**Existing reverse proxy:** run
+`docker compose -f deploy/compose.yml up -d --build status`.
+A host-based proxy can forward to `http://127.0.0.1:5080`. A containerized proxy
+must join `gdap-status_default` and forward to `http://status:8080`; its own
+localhost is not the host. Pass Authorization unchanged, disable response caching
+and do not log bearer headers or invitation paths at a proxy/CDN layer.
+
+The app is non-root, read-only, capability-dropped and resource-limited. It has no
+Docker socket and needs outbound Microsoft discovery/token and CIPP connectivity.
+Run **one replica**: cache, cooldown and rate limits are in-memory/process-local.
+Microsoft .NET 10/Caddy 2 image tags receive updates; pin approved digests for
+production and rebuild/test intentionally. No public container image is published.
+
+## 5. Companion and first live check
+
+Install matching companion 0.4.0. Choose **3 → C**. Enter
+`https://cippapi.fizlian.dev` (default), staff tenant ID, desktop app ID and central
+API app ID. Review the expected CIPP/partner and type `CONNECT`. Sign in as staff
+in the default browser. Setup verifies staff access and server binding before
+saving non-secret identifiers; it does not test upstream CIPP until a status read.
+
+Choose **5. Check CIPP onboarding** and paste an **already-approved invitation**.
+No customer sign-in, repeat approval or new onboarding task is required. Verify
+an authorized staff member succeeds and an unassigned account is denied. Future
+approved invitations automatically watch when configured. Without this server,
+acceptance and CIPP's webhook onboarding still work.
+
+Staff tokens are memory-only. The selected account can be used silently within
+the same process; initial interactive sign-in offers account selection. Restart
+the companion to discard tokens/change staff accounts. This is separate from
+fresh customer sign-in. Live Windows/Linux browser sign-in remains a deployment
+validation step; neither desktop requires a CIPP API secret.
+
+## Failure behavior and limits
+
+The central host reads CIPP at most once per 30 seconds across callers. Only
+status projections are retained; response caching is disabled. Missing records
+are waiting, not success. Queued/pending are not running. Watching ends at running
+or terminal status, or at 40 reads/20 minutes. Ctrl+C cancels only observation.
+Status failure never retries approval or retains a successful acceptance's lock.
+
+Requests to CIPP are bounded to 30 seconds/4 MiB. Failure clears cached evidence
+and starts a 60-second cooldown; rate limiting may extend it up to one hour.
+No stale success or raw upstream error is returned. The server's shared inbound
+limit is 120 requests/minute with a burst of 120. Responses use 503/Retry-After
+for upstream cooldown and 429 for inbound rate limiting. Clients reject wrong
+identity, malformed, future or >2-minute-old evidence; keep clocks synchronized.
+Multi-replica coordination and large-table pagination are not implemented.
+
+Audit logs contain HTTP result and staff object ID, not secrets/tokens, customer
+logs or relationship IDs. Protect staff identifiers with log access/retention
+controls. An application health check is not an upstream readiness check.
+
+## Migration
+
+Old 0.3.0 vault entries are never read, used or uploaded. **3 → L**, then `REMOVE`,
+deletes only the selected enrollment's old local credential, under the same OS
+user/state directory. Repeat on previously configured workstations. Revoke any
+distributed credential separately in CIPP; deleting a local entry is not revocation.
+**3 → D** removes only non-secret central settings, not server credentials or roles.
+
+## References
+
+- [CIPP API setup](https://docs.cipp.app/user-documentation/cipp/integrations/cipp-api)
+- [JWT validation](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-jwt-bearer-authentication?view=aspnetcore-10.0)
+- [Desktop authentication](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-acquire-token-interactive)
+- [Compose secrets](https://docs.docker.com/compose/how-tos/use-secrets/)
+- [Caddy HTTPS prerequisites](https://caddyserver.com/docs/automatic-https)
