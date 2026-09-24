@@ -8,10 +8,12 @@ Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Accepto
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
 Development version **0.4.0** moves optional status reporting to a separate
-authenticated Docker host, targeting `https://cippapi.fizlian.dev`. CIPP API
+authenticated Azure Container App in CIPP's existing subscription/resource group. CIPP API
 credentials stay on the server; workstations use staff sign-in. This replaces
 the 0.3.0 per-workstation API credential model. It is not in the published 0.1.6
-download and is not deployed. See [central setup](docs/CIPP-STATUS.md).
+download and is not deployed. See [Azure deployment](docs/AZURE-DEPLOYMENT.md)
+and [staff/CIPP authentication setup](docs/CIPP-STATUS.md). Azure's generated
+HTTPS address is sufficient initially; the custom hostname is optional.
 
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,

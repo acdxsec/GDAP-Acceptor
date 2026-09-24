@@ -1,11 +1,12 @@
 # Central CIPP status — 0.4.0 development
 
-Target: **https://cippapi.fizlian.dev**, on the operator's Ubuntu Docker server.
-Source and deployment files are prepared; the public host, DNS/TLS and live
-staff/CIPP authentication have not been verified. No Azure hosting, custom CIPP
-build, webhook modification or new onboarding job is needed. Customer acceptance
-is unchanged. The optional Caddy profile provides HTTPS; first check that no
-existing proxy is using ports 80/443.
+Target: a **separate Azure Container App**, in the same subscription and resource
+group as CIPP. The user superseded the Ubuntu-host plan. Use
+[Azure deployment](AZURE-DEPLOYMENT.md), not the Docker-host steps below.
+No Azure resources or live staff/CIPP authentication have been verified or
+deployed. No custom CIPP build, webhook modification or new onboarding job is
+needed. Customer acceptance is unchanged. Azure's generated HTTPS origin is the
+initial companion address; `cippapi.fizlian.dev` is optional later.
 
 ## Architecture and access scope
 
@@ -62,12 +63,14 @@ does not reduce what the CIPP credential itself can read.
 
 Copy CIPP's displayed API origin, authentication tenant, client ID and scope.
 Do not infer these from the portal URL. Only public-cloud Microsoft authentication
-is supported. If you enable CIPP IP restrictions, allow the **Ubuntu server's
-actual outbound public IP**, including NAT/VPN egress—not workstation IPs and not
-automatically the DNS address of `cippapi.fizlian.dev`. Confirm egress is stable.
+is supported. CIPP IP restrictions must match the **central service's actual
+outbound public IP**, not workstation IPs or the frontend/DNS address. The basic
+Azure template does not provide fixed egress: resolve that requirement before
+deployment with a separately reviewed network design. Do not use `96.11.28.184`
+for Azure egress.
 IP restrictions are optional; authentication/authorization remain mandatory.
 
-## 3. Server files and secret
+## 3. Alternative Docker-host files and secret (not the selected Azure deployment)
 
 From the tested source root, copy `deploy/settings.example.json` to
 `deploy/settings.json` and replace every `REPLACE_` value. Confirm the prefilled
@@ -92,7 +95,7 @@ Invalid required configuration or unreadable secrets stop startup. To rotate,
 replace the protected file and recreate/restart `status` to discard its memory
 token; revoke the old CIPP credential after verification.
 
-## 4. HTTPS and Docker launch
+## 4. Alternative Docker-host launch (not the selected Azure deployment)
 
 No server or DNS changes were performed during development. Before starting:
 
@@ -125,7 +128,8 @@ production and rebuild/test intentionally. No public container image is publishe
 ## 5. Companion and first live check
 
 Install matching companion 0.4.0. Choose **3 → C**. Enter
-`https://cippapi.fizlian.dev` (default), staff tenant ID, desktop app ID and central
+the Azure deployment's `companionOrigin` (replace the old custom-host default),
+staff tenant ID, desktop app ID and central
 API app ID. Review the expected CIPP/partner and type `CONNECT`. Sign in as staff
 in the default browser. Setup verifies staff access and server binding before
 saving non-secret identifiers; it does not test upstream CIPP until a status read.

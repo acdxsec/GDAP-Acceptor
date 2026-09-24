@@ -130,17 +130,25 @@ unchanged; new development packages must be identified separately.
 ### 0.4.0 central status deployment
 
 Development source replaces per-workstation CIPP secrets with public-client staff
-sign-in to an independently hosted Docker module. The user supplied Ubuntu/Docker
-and `cippapi.fizlian.dev`. Caddy HTTPS deployment files are included; existing port
-usage must be checked before startup. No public host/DNS/firewall or CIPP configuration
-was changed. No image or new public release was published.
+sign-in to an independent central service. The user confirmed Azure in CIPP's
+existing subscription/resource group, superseding the earlier Ubuntu/Docker plan.
+Separate Container Apps/registry deployment templates are prepared; CIPP remains
+unchanged. No public host/DNS/firewall, Azure resource or CIPP configuration was
+changed. No image or new public release was published.
+
+Both Azure Bicep templates compile locally with compiler 0.47.16; offline
+deployment-contract checks and all four existing server HTTP contract groups
+pass. CI now includes the template checks, but this change has not been run in
+remote CI. Target-subscription what-if/policy/quota checks, remote image build,
+Azure runtime mounts/TLS and real staff/CIPP authentication remain unverified.
 
 Local companion regression and central HTTP tests pass with synthetic credentials,
 real JWT middleware and isolated upstream responses. The image builds, runs non-root
 with a read-only filesystem, and rejects anonymous/spoofed identity requests. This
 does not verify live Entra app registrations, staff browser sign-in, role assignment,
 CIPP credentials/permissions, actual onboarding response or public DNS/TLS.
-See [deployment setup](CIPP-STATUS.md). The 0.4.1 MSI is only an upgrade-test fixture.
+See [Azure deployment](AZURE-DEPLOYMENT.md) and [identity setup](CIPP-STATUS.md).
+The 0.4.1 MSI is only an upgrade-test fixture.
 Legacy credentials are never read/uploaded; removal is explicit and remote
 revocation is a separate administrator action. Staff tokens are memory-only.
 
