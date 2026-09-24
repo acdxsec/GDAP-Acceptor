@@ -24,7 +24,9 @@ try {
     $logs = @($foundation.resources | Where-Object type -eq 'Microsoft.OperationalInsights/workspaces')[0]
     Assert-Contract ($logs.condition -eq "[parameters('retainLogs')]") 'Paid logging must be optional.'
     $environment = @($foundation.resources | Where-Object type -eq 'Microsoft.App/managedEnvironments')[0]
-    Assert-Contract ($environment.properties.appLogsConfiguration -like "*if(parameters('retainLogs')*" -and $environment.properties.appLogsConfiguration -like "*'destination', 'none'*") 'Disabled retained logging must not use a workspace.'
+    # Azure CLI maps --logs-destination none to null, not the rejected string "none".
+    $loggingExpression = $environment.properties.appLogsConfiguration
+    Assert-Contract ($loggingExpression.StartsWith("[if(parameters('retainLogs'), ") -and $loggingExpression.EndsWith("createObject('destination', null(), 'logAnalyticsConfiguration', null()))]")) 'Disabled retained logging must send null destination and null workspace configuration, not the unsupported string none.'
     Assert-Contract ($environment.properties.workloadProfiles[0].workloadProfileType -eq 'Consumption') 'Expected consumption environment.'
     Assert-Contract ($application.resources.Count -eq 1 -and $application.resources[0].type -eq 'Microsoft.App/containerApps') 'Application deployment must write only the companion Container App.'
     Assert-Contract ($application.parameters.cippClientSecret.type -ieq 'securestring') 'CIPP credential must be a secure deployment input.'

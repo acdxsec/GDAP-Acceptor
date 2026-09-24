@@ -39,7 +39,9 @@ resource environment 'Microsoft.App/managedEnvironments@2025-01-01' = {
         sharedKey: logs!.listKeys().primarySharedKey
       }
     } : {
-      destination: 'none'
+      // Match Azure CLI's --logs-destination none payload; literal 'none' is rejected.
+      destination: null
+      logAnalyticsConfiguration: null
     }
     workloadProfiles: [
       { name: 'Consumption', workloadProfileType: 'Consumption' }

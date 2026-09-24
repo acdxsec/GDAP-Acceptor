@@ -23,7 +23,8 @@ The retainLogs boolean is required, with no default:
 
 - true: dedicated workspace with 30-day retention; ingestion and retention can
   incur charges. Restrict access to staff object IDs in audit records.
-- false: destination none; live streaming remains available, but no historical
+- false: logging disabled with a JSON null destination (not the string `"none"`);
+  live streaming remains available, but no historical
   companion access/console logs are retained by this deployment.
   Existing CIPP onboarding logs are not disabled or changed.
 
@@ -169,8 +170,14 @@ scale-to-zero, one-replica limit, GHCR digest pinning, secure inputs and mounts.
 These tests do not replace live quota/policy, anonymous image pull, runtime
 mount, staff authentication or cold-start validation.
 
+The disabled-logging regression checks the compiled null destination and null
+workspace configuration against Azure CLI's payload. The previous string `"none"`
+compiled successfully but failed Azure provider preflight; compilation alone
+does not prove service acceptance. Run Azure what-if before deploying.
+
 - [Scaling and billing behavior](https://learn.microsoft.com/en-us/azure/container-apps/scale-app)
 - [Logging options](https://learn.microsoft.com/en-us/azure/container-apps/log-options)
+- [Azure CLI logging payload mapping](https://github.com/Azure/azure-cli/blob/dev/src/azure-cli/azure/cli/command_modules/containerapp/containerapp_env_decorator.py)
 - [GHCR access](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [GitHub package billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
 - [Azure secret handling](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
