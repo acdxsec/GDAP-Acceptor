@@ -17,7 +17,8 @@ internal static class GuidedConsole
             Console.WriteLine("2. Queue and recovery");
             Console.WriteLine("3. CIPP connection settings");
             Console.WriteLine("4. Export diagnostics");
-            Console.WriteLine("5. Check CIPP onboarding");
+            Console.WriteLine("5. Open CIPP onboarding");
+            Console.WriteLine("6. Create/resume invitation through CIPP, then accept");
             Console.WriteLine("0. Exit");
             Console.Write("Choose an action (or paste a Microsoft invitation): ");
             var choice = Console.ReadLine()?.Trim();
@@ -69,11 +70,11 @@ internal static class GuidedConsole
                     foreach (var item in instances.OrderBy(pair => pair.Key))
                         Console.WriteLine($"{Text(item.Value.BaseUrl)} | Partner: {Text(item.Value.PartnerTenantId)}");
                     Console.WriteLine("These settings do not configure CIPP Automated Onboarding or store customer credentials.");
-                    Console.WriteLine("A. Add a trusted CIPP origin | C. Connect central status | D. Disconnect central settings | L. Remove legacy local API credential");
+                    Console.WriteLine("A. Add a trusted CIPP origin | C. Configure invitation connector | D. Disconnect connector settings | L. Remove legacy local API credential");
                     Console.Write("Choose a settings action, or Enter to return: ");
                     var setting = Console.ReadLine()?.Trim().ToLowerInvariant();
                     if (setting == "a") lastCode = await execute(["configure"]);
-                    else if (setting == "c") lastCode = await execute(["cipp", "configure"]);
+                    else if (setting == "c") lastCode = await execute(["connector", "configure"]);
                     else if (setting == "d") lastCode = await execute(["cipp", "disconnect"]);
                     else if (setting == "l") lastCode = await execute(["cipp", "remove-legacy-credential"]);
                     lastAction = "Settings finished. No customer authentication was started.";
@@ -97,15 +98,17 @@ internal static class GuidedConsole
             }
             else if (choice == "5")
             {
-                Console.WriteLine("CIPP ONBOARDING | Read-only; no customer sign-in, approval or job submission");
+                Console.WriteLine("CIPP ONBOARDING | Opens the relationship page in your default browser; no job submission");
                 Console.Write("Paste the Microsoft invitation URL to match (blank to return): ");
                 var invitation = Console.ReadLine()?.Trim();
                 if (string.IsNullOrEmpty(invitation)) continue;
-                Console.Write("Enter to check once, W to watch for start (up to 20 minutes), or anything else to cancel: ");
-                var action = Console.ReadLine()?.Trim().ToLowerInvariant();
-                if (action is not ("" or "w")) continue;
-                lastCode = await execute(["cipp", action == "w" ? "watch" : "status", invitation]);
-                lastAction = "CIPP status check finished. GDAP access was not changed. See the result above.";
+                lastCode = await execute(["cipp", "open", invitation]);
+                lastAction = "CIPP page handoff finished. GDAP access was not changed.";
+            }
+            else if (choice == "6")
+            {
+                lastCode = await execute(["create"]);
+                lastAction = "Create/resume workflow finished. Review its result above; uncertain requests are not retried.";
             }
             else if (choice.StartsWith("https://", StringComparison.Ordinal))
                 await AcceptInvitation(choice);
@@ -120,7 +123,7 @@ internal static class GuidedConsole
             catch (ArgumentException error) { lastCode = 2; lastAction = error.Message; return; }
             lastCode = await execute([invitation]);
             lastAction = lastCode == 0
-                ? "GDAP active. See the separate CIPP status result above. Do not repeat approval."
+                ? "GDAP active. Continue on the CIPP onboarding page. Do not repeat approval."
                 : "Acceptance not confirmed. Inspect Queue and recovery before retrying.";
         }
     }

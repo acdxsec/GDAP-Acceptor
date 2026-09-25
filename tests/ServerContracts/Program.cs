@@ -48,6 +48,8 @@ await using var app = CentralHost.Build(builder, settings, services =>
 try
 {
     await app.StartAsync();
+    JournalProbeContracts.Run(root);
+    await InvitationContracts.Run(settings, root);
     using var client = app.GetTestClient();
     async Task<HttpResponseMessage> Get(string path, string? token = null)
     {
@@ -57,10 +59,10 @@ try
         request.Headers.Add("X-Forwarded-For", "127.0.0.1");
         return await client.SendAsync(request);
     }
-    string Token(string? omit = null, string? audience = null, string? issuer = null, DateTime? expiry = null, bool wrongKey = false, bool unsigned = false, string? replace = null)
+    string Token(string? omit = null, string? audience = null, string? issuer = null, DateTime? expiry = null, bool wrongKey = false, bool unsigned = false, string? replace = null, bool invitations = false)
     {
         var claims = new[] { new Claim("tid", settings.IdentityTenantId), new Claim("ver", "2.0"), new Claim("azp", settings.DesktopClientId),
-            new Claim("scp", "Status.Read"), new Claim("roles", "Onboarding.Read"), new Claim("oid", "77777777-7777-7777-7777-777777777777") }.Where(c => c.Type != omit).Select(c => c.Type == replace ? new Claim(c.Type, "88888888-8888-8888-8888-888888888888") : c);
+            new Claim("scp", invitations ? InvitationProtocol.Scope : "Status.Read"), new Claim("roles", invitations ? InvitationProtocol.Role : "Onboarding.Read"), new Claim("oid", "77777777-7777-7777-7777-777777777777") }.Where(c => c.Type != omit).Select(c => c.Type == replace ? new Claim(c.Type, "88888888-8888-8888-8888-888888888888") : c);
         using var other = RSA.Create(2048);
         var signing = unsigned ? null : new SigningCredentials(wrongKey ? new RsaSecurityKey(other) { KeyId = key.KeyId } : key, SecurityAlgorithms.RsaSha256);
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(issuer ?? settings.Authority, audience ?? settings.Audience, claims,
@@ -85,6 +87,33 @@ try
     }
     Console.WriteLine("PASS: real JWT middleware denies invalid signatures, issuer, audience, expiry, missing staff claims and spoofed identity headers before upstream access");
     var valid = Token();
+    foreach (var claim in new[] { "tid", "ver", "azp", "scp", "roles", "oid" })
+    {
+        using var denied = await Get("/v1/invitations/connection", Token(omit: claim, invitations: true));
+        Assert(denied.StatusCode == HttpStatusCode.Forbidden && peer.Calls.Count == 0, "Invitation identity claim missing: " + claim);
+    }
+    using var creatorConnection = await Get("/v1/invitations/connection", Token(invitations: true));
+    Assert(creatorConnection.IsSuccessStatusCode && peer.Calls.Count == 0, "Creator metadata requires old status role");
+    using var gated = new HttpRequestMessage(HttpMethod.Post, "/v1/invitations") { Content = JsonContent.Create(new { }) };
+    gated.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token(invitations: true));
+    using var gatedResponse = await client.SendAsync(gated);
+    Assert(gatedResponse.StatusCode == HttpStatusCode.ServiceUnavailable && peer.Calls.Count == 0, "Storage gate missing");
+    using var gatedTemplates = await Get("/v1/invitations/templates", Token(invitations: true));
+    Assert(gatedTemplates.StatusCode == HttpStatusCode.ServiceUnavailable && peer.Calls.Count == 0, "Incomplete deployment offered creation templates");
+    settings.InvitationJournalDirectory = root;
+    foreach (var body in new[] { "{\"operationId\":\"a\",\"operationId\":\"b\"}", "{\"url\":\"https://attacker.example\"}", new string('x', 5000) })
+    {
+        using var malformed = new HttpRequestMessage(HttpMethod.Post, "/v1/invitations") { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        malformed.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token(invitations: true));
+        using var response = await client.SendAsync(malformed);
+        Assert(response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.RequestEntityTooLarge && peer.Calls.Count == 0, "Malformed/oversized creation reached CIPP");
+    }
+    settings.InvitationJournalDirectory = null;
+    Console.WriteLine("PASS: creator-specific HTTP authorization, bounded strict input and storage gate; status readers cannot create");
+    using var forbiddenCreate = new HttpRequestMessage(HttpMethod.Post, "/v1/invitations") { Content = JsonContent.Create(new { operationId = Guid.NewGuid().ToString() }) };
+    forbiddenCreate.Headers.Authorization = new AuthenticationHeaderValue("Bearer", valid);
+    using var deniedCreate = await client.SendAsync(forbiddenCreate);
+    Assert(deniedCreate.StatusCode == HttpStatusCode.Forbidden && peer.Calls.Count == 0, "Status reader gained invitation creation permission");
     using var connection = await Get("/v1/connection", valid);
     var metadata = await connection.Content.ReadFromJsonAsync<ConnectionInfo>();
     Assert(connection.IsSuccessStatusCode && metadata == new ConnectionInfo(1, settings.CippOrigin, settings.PartnerTenantId) && peer.Calls.Count == 0, "Wrong authenticated metadata");
@@ -131,7 +160,7 @@ try
     Assert(blocked, "Global request limit missing");
     Console.WriteLine("PASS: bounded public request rate; no live identity provider, CIPP, tenant or server contacted");
 }
-finally { await app.StopAsync(); File.Delete(secretFile); Directory.Delete(root); }
+finally { await app.StopAsync(); Directory.Delete(root, recursive: true); } // exact synthetic fixture root
 
 static void Assert(bool value, string message) { if (!value) throw new Exception(message); }
 sealed class Clock : TimeProvider

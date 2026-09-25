@@ -29,31 +29,31 @@ internal sealed class CippStatus : IDisposable
         directory = Path.GetFullPath(stateDirectory);
         // Scale-to-zero hosts can need time to pull/start the container. This
         // remains bounded by the enclosing setup/check/watch cancellation too.
-        http = new HttpClient(transport) { Timeout = TimeSpan.FromMinutes(2), MaxResponseContentBufferSize = 16384 };
+        http = new HttpClient(transport) { Timeout = TimeSpan.FromMinutes(2), MaxResponseContentBufferSize = 262144 };
         this.signIn = signIn; this.legacy = legacy; this.delay = delay ?? Task.Delay;
     }
-    internal Task<int> Configure(string id, Instance instance) => Guard(async () =>
+    internal Task<int> Configure(string id, Instance instance, bool invitations = false) => Guard(async () =>
     {
-        Console.WriteLine("Central status setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
-        var origin = Ask("Central HTTPS address [https://cippapi.fizlian.dev]: ");
-        var connection = new CentralConnection(instance, StatusProtocol.Origin(origin.Length == 0 ? "https://cippapi.fizlian.dev" : origin),
+        Console.WriteLine("CIPP connector setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
+        var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address [https://cippapi.fizlian.dev]: ");
+        var connection = new CentralConnection(instance, StatusProtocol.Origin(origin.Length == 0 && !invitations ? "https://cippapi.fizlian.dev" : origin),
             StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: ")),
             StatusProtocol.GuidValue(Ask("Companion desktop application/client ID: ")),
-            StatusProtocol.GuidValue(Ask("Central status API application/client ID: ")));
+            StatusProtocol.GuidValue(Ask("Connector application/client ID: ")));
         Validate(connection, instance);
-        Console.WriteLine($"Central host: {connection.Origin}\nStaff tenant: {connection.TenantId}\nDesktop client: {connection.ClientId}\nScope: api://{connection.ApiId}/Status.Read\nExpected CIPP: {instance.BaseUrl}\nExpected partner: {instance.PartnerTenantId}");
+        Console.WriteLine($"Central host: {connection.Origin}\nStaff tenant: {connection.TenantId}\nDesktop client: {connection.ClientId}\nScope: api://{connection.ApiId}/{(invitations ? InvitationProtocol.Scope : StatusProtocol.Scope)}\nExpected CIPP: {instance.BaseUrl}\nExpected partner: {instance.PartnerTenantId}");
         if (Ask("Type CONNECT to sign in and save these non-secret settings: ") != "CONNECT")
         { Console.WriteLine("Connection setup cancelled. Existing settings are unchanged."); return 1; }
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-        Console.WriteLine("Connecting to central status. A sleeping host may take up to two minutes to respond.");
-        using var metadata = await Send(connection, "/v1/connection", timeout.Token);
+        Console.WriteLine("Connecting. A sleeping host may take up to two minutes to respond.");
+        using var metadata = await Send(connection, invitations ? "/v1/invitations/connection" : "/v1/connection", timeout.Token);
         var info = metadata.RootElement.Deserialize<ConnectionInfo>(Json) ?? throw new InvalidDataException();
         if (info.Version != 1 || info.CippOrigin != instance.BaseUrl || info.PartnerTenantId != instance.PartnerTenantId) throw new InvalidDataException();
         Directory.CreateDirectory(directory);
         var temporary = Path.Combine(directory, "central-" + Guid.NewGuid().ToString("N") + ".tmp");
         try { await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(connection), timeout.Token); File.Move(temporary, FileFor(id), overwrite: true); }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
-        Console.WriteLine("Central connection saved. Staff access and CIPP/partner binding verified. Check an invitation for live upstream status. No credential or token saved.");
+        Console.WriteLine("Central connection saved. Staff access and CIPP/partner binding verified. No credential or token saved.");
         return 0;
     });
     internal Task<int> Disconnect(string id) => Guard(() =>
@@ -117,11 +117,12 @@ internal sealed class CippStatus : IDisposable
             status.ObservedAt > DateTimeOffset.UtcNow.AddMinutes(2) || status.ObservedAt < DateTimeOffset.UtcNow.AddMinutes(-2)) throw new InvalidDataException();
         return status;
     }
-    private async Task<JsonDocument> Send(CentralConnection connection, string path, CancellationToken cancellation)
+    internal async Task<JsonDocument> Send(CentralConnection connection, string path, CancellationToken cancellation, object? body = null)
     {
         var token = await signIn(connection, cancellation);
         if (string.IsNullOrWhiteSpace(token) || token.Any(char.IsControl)) throw new InvalidDataException();
-        using var request = new HttpRequestMessage(HttpMethod.Get, connection.Origin + path);
+        using var request = new HttpRequestMessage(body is null ? HttpMethod.Get : HttpMethod.Post, connection.Origin + path);
+        if (body is not null) request.Content = System.Net.Http.Json.JsonContent.Create(body);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var response = await http.SendAsync(request, cancellation);
         if (!response.IsSuccessStatusCode)
@@ -130,7 +131,7 @@ internal sealed class CippStatus : IDisposable
             throw new StatusProblem(response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => "Staff authentication rejected. Check central app IDs and restart the companion to sign in again.",
-                HttpStatusCode.Forbidden => "Staff access denied. Ask the administrator to verify your Onboarding.Read role and desktop app permission.",
+                HttpStatusCode.Forbidden => "Staff access denied. Ask the administrator to verify the required connector role and desktop app permission.",
                 HttpStatusCode.BadGateway or HttpStatusCode.GatewayTimeout => "Central host is starting or unavailable. Wait and check status again; do not repeat GDAP approval.",
                 HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable => "Central status unavailable or rate limited. Wait at least " +
                     Math.Ceiling(Math.Clamp((response.Headers.RetryAfter?.Delta ?? response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow ?? TimeSpan.FromSeconds(60)).TotalSeconds, 1, 3600)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " seconds before checking again. No retry was submitted.",
@@ -141,10 +142,10 @@ internal sealed class CippStatus : IDisposable
         var type = response.Content.Headers.ContentType?.MediaType;
         if (type != "application/json" && !(type?.EndsWith("+json", StringComparison.Ordinal) ?? false)) throw new InvalidDataException();
         var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation), new JsonDocumentOptions { MaxDepth = 8 });
-        try { StatusProtocol.UniqueObject(document.RootElement); return document; }
+        try { StatusProtocol.UniqueObject(document.RootElement); InvitationProtocol.UniqueTree(document.RootElement); return document; }
         catch { document.Dispose(); throw; }
     }
-    private CentralConnection? Load(string id, Instance instance)
+    internal CentralConnection? Load(string id, Instance instance)
     {
         var file = FileFor(id);
         if (!File.Exists(file)) return null;

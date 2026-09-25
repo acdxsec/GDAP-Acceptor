@@ -77,24 +77,25 @@ internal static class CippContracts
         peer.ResponseDelay = TimeSpan.Zero;
         Console.WriteLine("PASS: delayed cold-start status succeeds past 40 seconds without retry or approval; gateway errors remain fail-closed");
         result = await Launch(state, [], $"5\n{url}\n\n0\n", connector);
-        Assert(result.Output.Contains("CIPP onboarding: running"), "Guided status check failed");
+        Assert(result.Output.Contains("/onboarding/start?id=relationship-1"), "Guided browser handoff failed");
         var calls = 0;
+        var beforeAcceptance = peer.Calls.Count;
         result = await Launch(state, [url], "", connector, (_, _) => { calls++; return Task.FromResult(AcceptanceOutcome.Active); });
-        Assert(result.Code == 0 && calls == 1 && result.Output.Contains("CIPP onboarding: running") && new LocalState(state).Active() is null, "Independent watch after successful approval failed");
+        Assert(result.Code == 0 && calls == 1 && peer.Calls.Count == beforeAcceptance && result.Output.Contains("/onboarding/start?id=relationship-1") && new LocalState(state).Active() is null, "Acceptance must open CIPP without calling status");
         peer.Code = HttpStatusCode.ServiceUnavailable;
         result = await Launch(state, [url], "", connector, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
         Assert(result.Code == 0 && new LocalState(state).Active() is null, "Central failure invalidated approval or retained reservation");
         var beforeStop = peer.Calls.Count;
         result = await Launch(state, [url], "", connector, (_, _) => Task.FromResult(AcceptanceOutcome.Stopped));
         Assert(peer.Calls.Count == beforeStop, "Stopped approval read status");
-        Console.WriteLine("PASS: menu and post-approval watch remain read-only; central outages cannot invalidate or retry approval");
+        Console.WriteLine("PASS: menu and post-approval handoff open CIPP without polling; central outages cannot invalidate or retry approval");
         var boundedPeer = new Peer { Status = "queued" };
         using var bounded = new CippStatus(state, boundedPeer, SignIn, legacy, (_, _) => Task.CompletedTask);
         result = await Launch(state, ["cipp", "watch", url], "", bounded);
         Assert(result.Output.Contains("watch limit reached") && boundedPeer.Calls.Count == 40, "Unbounded watch");
         using var cancelled = new CippStatus(state, new Peer(), (_, _) => throw new OperationCanceledException(), legacy);
         result = await Launch(state, [url], "", cancelled, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
-        Assert(result.Code == 0 && result.Output.Contains("stopped or timed out") && new LocalState(state).Active() is null, "Staff cancellation invalidated approval");
+        Assert(result.Code == 0 && result.Output.Contains("/onboarding/start?id=relationship-1") && new LocalState(state).Active() is null, "Acceptance must not start staff authentication");
         var beforeBad = signIns;
         foreach (var origin in new[] { "http://cippapi.fizlian.dev", "https://user:secret@cippapi.fizlian.dev", "https://cippapi.fizlian.dev/path", "https://cippapi.fizlian.dev/?token=secret" })
         {
