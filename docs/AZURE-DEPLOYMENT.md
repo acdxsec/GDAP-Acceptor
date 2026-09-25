@@ -68,7 +68,16 @@ or changes successful acceptance. A synthetic 45-second response tests the old
 timeout regression, not actual Azure cold-start latency. Live validation is
 still required. Process restarts discard cached CIPP tokens/results and limits.
 
-## Remaining inputs
+## Invitation-creation pivot
+
+The status-only image and templates in this runbook do not enable the new
+[invitation creation workflow](INVITATION-WORKFLOW.md). The hosting environment
+can be reused, but a durable shared creation journal, Invitations.Create staff
+scope/role and Tenant.Relationship.ReadWrite CIPP access are required. Do not
+deploy the earlier image or create status-only permissions for the new workflow.
+Persistent-storage wiring and its cost/security review remain a deployment gate.
+
+## Remaining inputs (historical status-only deployment)
 
 - Staff API/desktop Entra registrations, assigned Onboarding.Read role and
   dedicated read-only CIPP API client: [identity setup](CIPP-STATUS.md).

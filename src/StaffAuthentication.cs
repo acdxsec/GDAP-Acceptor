@@ -7,7 +7,9 @@ internal sealed class StaffAuthentication
     private CentralConnection? selected;
     private IPublicClientApplication? app;
     private IAccount? account;
-    internal async Task<string> Token(CentralConnection connection, CancellationToken cancellation)
+    internal Task<string> Token(CentralConnection connection, CancellationToken cancellation) => Acquire(connection, "Status.Read", cancellation);
+    internal Task<string> InvitationToken(CentralConnection connection, CancellationToken cancellation) => Acquire(connection, Gdap.Status.InvitationProtocol.Scope, cancellation);
+    private async Task<string> Acquire(CentralConnection connection, string scope, CancellationToken cancellation)
     {
         if (selected != connection)
         {
@@ -16,7 +18,7 @@ internal sealed class StaffAuthentication
                 .WithRedirectUri("http://localhost").Build();
             selected = connection; account = null;
         }
-        var scopes = new[] { $"api://{connection.ApiId}/Status.Read" };
+        var scopes = new[] { $"api://{connection.ApiId}/{scope}" };
         AuthenticationResult result;
         try
         {

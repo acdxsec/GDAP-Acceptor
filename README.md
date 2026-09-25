@@ -7,17 +7,15 @@ custom API, or locally installed M365Internals checkout is needed.
 Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
 for Windows/Linux installers, portable packages, checksums and installation instructions.
 
-Development version **0.4.0** moves optional status reporting to a separate
-authenticated Azure Container App in CIPP's existing subscription/resource group. CIPP API
-credentials stay on the server; workstations use staff sign-in. This replaces
-the 0.3.0 per-workstation API credential model. It is not in the published 0.1.6
-download and is not deployed. See [Azure deployment](docs/AZURE-DEPLOYMENT.md)
-and [staff/CIPP authentication setup](docs/CIPP-STATUS.md). Azure's generated
-HTTPS address is sufficient initially; the custom hostname is optional.
-The revised Azure deployment scales to zero when idle and pulls an approved
-GHCR image; it creates no paid Azure registry or registry-pull identity. Retained
-companion logs are an explicit choice. The earlier five-resource foundation
-preview is superseded; do not deploy its old downloaded template.
+Current development adds **Create/resume invitation through CIPP → customer
+acceptance → open the relationship's CIPP onboarding page**. It replaces the
+unrequested post-approval status-watch flow. Existing CIPP automation still owns
+onboarding. Invitation creation uses an authenticated connector so no CIPP secret
+is distributed to workstations. Pasting an existing invitation needs no connector.
+See [invitation workflow and deployment gates](docs/INVITATION-WORKFLOW.md).
+This code is not in the published 0.1.6 downloads or the earlier status-only image.
+Live creation remains disabled until durable storage and creation permissions are
+configured; the existing Azure templates alone are insufficient.
 
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,
@@ -59,19 +57,22 @@ executable, or run the executable from its extracted package:
 4. The same browser opens the invitation. Review the tenant, partner and requested
    access in the terminal and confirm approval. The script rechecks identity and
    terms before submitting and waits for the relationship to become active.
-5. The launcher opens CIPP's normal GDAP Onboarding page in your default browser.
+5. The launcher opens the relationship's CIPP Onboarding page in your default browser.
    Existing CIPP Automated Onboarding handles the Microsoft approval event.
    **Active GDAP is not a claim that CIPP onboarding started or completed.**
-6. If central status access is configured, the companion watches the exact relationship's
-   CIPP record for up to 20 minutes. Queued is reported separately from running.
-   Ctrl+C stops only the status watch; CIPP continues independently. A failed
-   status check never changes a successful GDAP approval or submits another job.
+   No central status check or watch follows approval.
+
+To generate the invitation inside the companion instead of pasting it, use **6**.
+Select a CIPP template and confirm CREATE; the generated invitation feeds directly
+into steps 3–5 above. Reopening **6** resumes uncertain creation with a read-only
+lookup instead of generating a duplicate. This path requires the configured
+invitation connector; see its deployment gates before using it live.
 
 After the action, the workspace returns to its home menu. Choose **2** to inspect
 the local queue and explicitly review an interrupted reservation, **3** to view
 or add trusted CIPP connections, **4** to export local diagnostics to a new file,
-**5** to check/watch CIPP onboarding without repeating acceptance, or **0** to
-exit. In settings, **C** connects central status, **D** removes local connection
+**5** to open the relationship's CIPP page without repeating acceptance, or **0** to
+exit. In settings, **C** configures invitation creation, **D** removes local connection
 settings, and **L** removes an old 0.3.0 local API credential with explicit consent.
 These actions do not authenticate to a customer or
 start CIPP onboarding. Approval and CUSTOMER confirmation remain in this terminal.
@@ -79,9 +80,10 @@ start CIPP onboarding. Approval and CUSTOMER confirmation remain in this termina
 Staff sign-in uses the default browser and a public desktop Entra application;
 only non-secret connection identifiers are stored locally. Staff tokens stay in
 memory and are separate from customer approval cookies. The central host holds
-one read-only CIPP client credential in a mounted secret file, never in the image
-or workstation package. Server deployment and Entra setup must be completed
-first; see [central setup and limitations](docs/CIPP-STATUS.md).
+one dedicated CIPP client credential in a mounted secret file, never in the image
+or workstation package. Invitation creation requires Tenant.Relationship.ReadWrite
+and an assigned Invitations.Create staff role/scope, not the old read-only setup.
+See [setup and limitations](docs/INVITATION-WORKFLOW.md).
 
 You can also pass the full URL as a single quoted command-line argument.
 Cancellation or a tenant change stops approval. Authentication uses an isolated

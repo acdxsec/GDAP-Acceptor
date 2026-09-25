@@ -1,5 +1,10 @@
 # Central CIPP status — 0.4.0 development
 
+> Historical status-only design. The requested workflow is now
+> [invitation creation and browser handoff](INVITATION-WORKFLOW.md).
+> Do not use the read-only role/scope below to configure invitation creation.
+> Automatic post-approval status polling has been removed.
+
 Target: a **separate Azure Container App**, in the same subscription and resource
 group as CIPP. The user superseded the Ubuntu-host plan. Use
 [Azure deployment](AZURE-DEPLOYMENT.md), not the Docker-host steps below.

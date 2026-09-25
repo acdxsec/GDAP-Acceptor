@@ -1,5 +1,16 @@
 # Release gates and known limitations
 
+## Invitation-creation development gate
+
+The current source adds CIPP template selection, confirmed invitation creation,
+durable operation recovery and relationship-specific browser handoff. The
+published desktop installers and earlier GHCR image do not contain this pivot.
+No live invitation has been created by the development tests. Creation remains
+disabled in the existing Azure templates until a persistent shared journal mount
+is provisioned and tested across restarts/revisions. Staff creation permissions,
+dedicated CIPP write-category permissions, matched artifact builds and a live
+authorized end-to-end check remain required. See [workflow](INVITATION-WORKFLOW.md).
+
 ## Current distribution decision
 
 Continue with unsigned development builds; the user declined paid signing.

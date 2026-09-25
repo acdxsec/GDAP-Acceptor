@@ -11,6 +11,7 @@ var unexpectedAcceptances = 0;
 try
 {
     await CippContracts.Run(root);
+    await InvitationContracts.Run(root);
     var menu = await Run(Path.Combine(root, "menu-exit"), [], "0\n", MustNotAccept);
     Assert(menu.Code == 0 && menu.Output.Contains("1. Accept invitation") && menu.Output.Contains("2. Queue and recovery"), "Guided home menu is missing or exiting starts acceptance");
     Pass("guided home menu exits without setup or authentication");
