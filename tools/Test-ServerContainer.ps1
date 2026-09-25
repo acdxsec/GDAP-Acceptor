@@ -22,6 +22,8 @@ $Config = @{
 # Synthetic fixture permissions only; container UID 1654 must read the binds.
 if (-not $IsWindows) { & chmod 755 $Fixture; & chmod 644 $Settings $Secret }
 $Started = $false
+$JournalVolume = "$Name-journal"
+$JournalCreated = $false
 $Client = [Net.Http.HttpClient]::new()
 $Client.Timeout = [TimeSpan]::FromSeconds(3)
 try {
@@ -41,7 +43,7 @@ try {
         Start-Sleep -Milliseconds 500
     }
     if (-not $Ready) { throw 'Container did not become healthy.' }
-    foreach ($Route in @('/v1/connection', '/v1/onboarding/relationship-1')) {
+    foreach ($Route in @('/v1/connection', '/v1/onboarding/relationship-1', '/v1/invitations/connection', '/v1/invitations/templates')) {
         $Request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, "http://$Address$Route")
         $Request.Headers.Add('X-MS-CLIENT-PRINCIPAL', 'spoofed-admin')
         $Response = $Client.SendAsync($Request).GetAwaiter().GetResult()
@@ -50,10 +52,25 @@ try {
     }
     $User = (& $Engine inspect --format '{{.Config.User}}' $Name).Trim()
     if ($User -ne '1654') { throw 'Server image did not run as the expected non-root user.' }
+    $null = & $Engine volume create $JournalVolume
+    if ($LASTEXITCODE -ne 0) { throw 'Could not create isolated probe volume.' }
+    $JournalCreated = $true
+    # Only the fresh synthetic volume gets ownership initialized as root. The
+    # actual probe containers run with the image's non-root UID and no network.
+    $null = & $Engine run --rm --network none --read-only --user 0 --entrypoint chown --mount "type=volume,source=$JournalVolume,target=/var/lib/gdap-journal" $Image 1654:1654 /var/lib/gdap-journal
+    if ($LASTEXITCODE -ne 0) { throw 'Could not initialize synthetic volume ownership.' }
+    $ProbeId = [guid]::NewGuid().ToString()
+    foreach ($Mode in @('prepare', 'verify')) {
+        & $Engine run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --mount "type=volume,source=$JournalVolume,target=/var/lib/gdap-journal" $Image journal-probe $Mode $ProbeId
+        if ($LASTEXITCODE -ne 0) { throw "Offline non-root probe failed in fresh container: $Mode" }
+    }
+    Write-Output 'PASS: offline journal probe survives replacement by a fresh non-root container, without settings, credentials or networking. Azure SMB still requires live verification.'
     Write-Output 'PASS: non-root read-only container starts, liveness works, protected routes reject anonymous/spoofed identities. No real credentials or approvals.'
 } finally {
     $Client.Dispose()
     if ($Started) { $null = & $Engine rm --force $Name }
+    # Exact throwaway named volume created by this test; synthetic probe only.
+    if ($JournalCreated) { $null = & $Engine volume rm $JournalVolume }
     [IO.File]::Delete($Secret)
     [IO.File]::Delete($Settings)
     [IO.Directory]::Delete($Fixture)

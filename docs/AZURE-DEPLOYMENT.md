@@ -1,5 +1,10 @@
 # Lower-cost Azure companion deployment
 
+> Historical status-only runbook. For the current invitation workflow, use
+> [Azure invitation setup](AZURE-INVITATIONS.md), including the separate storage
+> preview, creation-disabled staging and corrected permissions. Do not execute the
+> status-only identity or live-check instructions below for invitation creation.
+
 Target: the existing CIPP subscription and **CIPP-Resorces** resource group,
 North Central US, but **separate compute**. The B2 CIPP plan's operator-supplied
 seven-day metrics showed CPU averaging 6.74% (highest minute 82%) and memory
@@ -75,7 +80,9 @@ The status-only image and templates in this runbook do not enable the new
 can be reused, but a durable shared creation journal, Invitations.Create staff
 scope/role and Tenant.Relationship.ReadWrite CIPP access are required. Do not
 deploy the earlier image or create status-only permissions for the new workflow.
-Persistent-storage wiring and its cost/security review remain a deployment gate.
+Optional persistent-storage wiring is now prepared in `journal.bicep` and
+`application.bicep`; it remains disabled by default and requires approval/live
+verification. See the current runbook linked above.
 
 ## Remaining inputs (historical status-only deployment)
 

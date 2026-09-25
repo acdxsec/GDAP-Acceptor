@@ -15,7 +15,9 @@ is distributed to workstations. Pasting an existing invitation needs no connecto
 See [invitation workflow and deployment gates](docs/INVITATION-WORKFLOW.md).
 This code is not in the published 0.1.6 downloads or the earlier status-only image.
 Live creation remains disabled until durable storage and creation permissions are
-configured; the existing Azure templates alone are insufficient.
+configured. [Azure setup](docs/AZURE-INVITATIONS.md) now includes an isolated
+pay-as-you-go journal mount and an offline persistence probe; creation is disabled
+by default until the live checks pass.
 
 Version **0.1.6** preserves the local reservation after uncertain
 approval outcomes, failed readback and abnormal child exits. Before retrying,

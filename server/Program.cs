@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 
+if (args.FirstOrDefault() == "journal-probe") return JournalProbe.Run(args);
+
 try
 {
     var app = CentralHost.Build(WebApplication.CreateBuilder(args), ServiceSettings.Load());

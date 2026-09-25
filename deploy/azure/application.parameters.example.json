@@ -6,6 +6,8 @@
     "location": { "value": "REPLACE_AZURE_REGION" },
     "imageDigest": { "value": "REPLACE_BUILT_IMAGE_DIGEST" },
     "configurationVersion": { "value": "1" },
+    "mountInvitationJournal": { "value": true },
+    "enableInvitationCreation": { "value": false },
     "settings": {
       "value": {
         "IdentityTenantId": "REPLACE_STAFF_TENANT_ID",

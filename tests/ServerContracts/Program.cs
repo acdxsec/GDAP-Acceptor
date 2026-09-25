@@ -48,6 +48,7 @@ await using var app = CentralHost.Build(builder, settings, services =>
 try
 {
     await app.StartAsync();
+    JournalProbeContracts.Run(root);
     await InvitationContracts.Run(settings, root);
     using var client = app.GetTestClient();
     async Task<HttpResponseMessage> Get(string path, string? token = null)

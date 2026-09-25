@@ -62,9 +62,10 @@ that preserves atomic create-new and durable flush semantics across every revisi
 and replica. With this variable absent, POST creation is disabled (HTTP 503).
 The directory must already exist and be writable by the container's non-root UID.
 
-**The existing Azure templates have no such mount. They deliberately do not enable
-creation.** Azure storage selection, cost review, persistent mount wiring and live
-restart/concurrency verification remain deployment work. Do not point this setting
+**The Azure templates now offer a dedicated SMB journal mount, with creation
+disabled by default.** Follow [Azure invitation setup](AZURE-INVITATIONS.md).
+Cost/network approval, deployment and live restart/concurrency verification remain
+required. Do not point this setting
 at `/tmp`, the container's writable layer or per-replica ephemeral storage merely
 to bypass the gate. No storage resources have been created by this code change.
 
@@ -100,7 +101,7 @@ concurrent reservation, response loss, absent/conflicting evidence, wrong partne
 desktop resume, no-secret persistence and the exact browser handoff. Existing
 PowerShell approval/wrapper/launcher outcome contracts remain in place.
 
-Before live use: provision the approved persistent mount, configure Entra/CIPP
+Before live use: approve and provision the dedicated persistent mount, configure Entra/CIPP
 permissions, build/test new matched desktop and connector artifacts, validate
 against the installed CIPP version, and perform one authorized live creation and
 acceptance. Existing CIPP source, image and webhook behavior must stay unchanged.
