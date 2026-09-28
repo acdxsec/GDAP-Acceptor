@@ -34,18 +34,22 @@ Use the user-confirmed staff tenant
 `b618675e-4f91-4bc1-8ab6-3e7bc2c5cfaf`. Hosting remains in the existing sponsorship
 subscription; partner binding remains `39851031-8246-4fdc-941b-b504fcb5df10`.
 
-- Connector resource registration: single tenant, v2 access tokens,
+- One companion registration for desktop sign-in and API access: single tenant, v2 access tokens,
   `api://<app-id>`, admin-consent delegated scope **Invitations.Create** and an
-  enabled user/group app role **Invitations.Create**. Require assignment and
-  assign only explicitly authorized staff. Keep existing Conditional Access.
-- Desktop registration: single tenant, public client, `http://localhost`
-  callback, delegated Invitations.Create permission with admin consent. No secret.
+  enabled user/group app role **Invitations.Creator** (distinct from the scope).
+  Require assignment and assign the dedicated staff security group. Keep existing
+  Conditional Access. Add the Mobile and desktop `http://localhost` callback and
+  its own delegated Invitations.Create permission with admin consent to this same
+  registration. No companion secret and no second companion registration.
 - CIPP API client: dedicated centrally held credential, CIPP's
   **Tenant.Relationship.ReadWrite** category. Read-only credentials are insufficient.
   This category is broader than creation alone; CIPP also guards template editing
   and invite update/delete with it. The connector does NOT expose those operations.
   It exposes no arbitrary CIPP URL, action, roles, groups or onboarding mutation.
-- Existing ServiceSettings file fields and CIPP secret mount remain unchanged.
+- Existing ServiceSettings file fields and CIPP secret mount remain unchanged;
+  set `Audience` and `DesktopClientId` to the same companion client ID. New desktop
+  connector setup prompts for one ID. Older split-registration saved connections
+  remain supported, without automatically deleting or changing them.
   Both authentication tenant and CIPP API origin/scope must come from the actual
   CIPP configuration, not an assumption based on the portal URL.
 

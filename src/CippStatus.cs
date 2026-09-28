@@ -34,14 +34,17 @@ internal sealed class CippStatus : IDisposable
     }
     internal Task<int> Configure(string id, Instance instance, bool invitations = false) => Guard(async () =>
     {
-        Console.WriteLine("CIPP connector setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
+        Console.WriteLine(invitations
+            ? "CIPP connector setup. Use the existing companion app registration for both staff sign-in and API access. No second registration or CIPP secret is needed on this computer."
+            : "CIPP connector setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
         var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address [https://cippapi.fizlian.dev]: ");
-        var connection = new CentralConnection(instance, StatusProtocol.Origin(origin.Length == 0 && !invitations ? "https://cippapi.fizlian.dev" : origin),
-            StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: ")),
-            StatusProtocol.GuidValue(Ask("Companion desktop application/client ID: ")),
-            StatusProtocol.GuidValue(Ask("Connector application/client ID: ")));
+        var endpoint = StatusProtocol.Origin(origin.Length == 0 && !invitations ? "https://cippapi.fizlian.dev" : origin);
+        var tenantId = StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: "));
+        var clientId = StatusProtocol.GuidValue(Ask(invitations ? "Companion Application (client) ID (existing registration): " : "Companion desktop application/client ID: "));
+        var apiId = invitations ? clientId : StatusProtocol.GuidValue(Ask("Connector application/client ID: "));
+        var connection = new CentralConnection(instance, endpoint, tenantId, clientId, apiId);
         Validate(connection, instance);
-        Console.WriteLine($"Central host: {connection.Origin}\nStaff tenant: {connection.TenantId}\nDesktop client: {connection.ClientId}\nScope: api://{connection.ApiId}/{(invitations ? InvitationProtocol.Scope : StatusProtocol.Scope)}\nExpected CIPP: {instance.BaseUrl}\nExpected partner: {instance.PartnerTenantId}");
+        Console.WriteLine($"Central host: {connection.Origin}\nStaff tenant: {connection.TenantId}\nApplication client: {connection.ClientId}\nScope: {StaffAuthentication.RequestScope(connection, invitations ? InvitationProtocol.Scope : StatusProtocol.Scope)}\nExpected CIPP: {instance.BaseUrl}\nExpected partner: {instance.PartnerTenantId}");
         if (Ask("Type CONNECT to sign in and save these non-secret settings: ") != "CONNECT")
         { Console.WriteLine("Connection setup cancelled. Existing settings are unchanged."); return 1; }
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));

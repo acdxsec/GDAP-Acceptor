@@ -59,11 +59,11 @@ creation disabled while investigating, rather than clearing records.
 
 ## Identity setup inputs
 
-Two companion registrations have different jobs: the desktop identifies the
-public client signing in staff; the connector registration is the protected
-resource staff are allowed to call. Neither needs a client secret. CIPP's own
-dedicated API client is separate and is the only secret-bearing identity here.
-Do not assume any of these registrations already exists.
+Use **one companion app registration** for desktop staff sign-in and the API.
+Reuse the existing `GDAP Invitation Connector`; do not create `GDAP Acceptor Desktop`.
+For this setup its client ID is `d5480b6c-2b3d-4eb5-a148-55053c24e690`.
+It has no client secret. CIPP's own dedicated API client remains separate: its
+credential is used only by the Azure service and is never sent to a workstation.
 
 For a new connector registration in the confirmed staff tenant:
 
@@ -71,22 +71,35 @@ For a new connector registration in the confirmed staff tenant:
 - Set its Application ID URI to `api://<connector-client-id>` and the manifest's
   `api.requestedAccessTokenVersion` to `2`.
 - Expose enabled, admin-consent-only delegated scope `Invitations.Create`.
-- Add enabled app role `Invitations.Create`, allowed member type Users/Groups.
-- In its Enterprise Application, require assignment and assign only the approved
-  staff user(s)/group(s) to that role. Do not grant everyone access. Keep MFA and
+- Add enabled app role `Invitations.Creator`, display name **Create GDAP invitations**,
+  allowed member type Users/Groups. Keep this value distinct from the delegated
+  scope: Entra rejects duplicate values across scopes and app roles.
+- In its Enterprise Application, require assignment and assign the dedicated
+  staff security group to that role. Do not grant everyone access. Keep MFA and
   Conditional Access intact.
 
-For the desktop registration, recommended name `GDAP Acceptor Desktop`:
+On that **same** registration, enable desktop sign-in:
 
 - Single tenant; Authentication → Add a platform → Mobile and desktop applications,
   with system-browser callback `http://localhost`. Do not create a secret.
-- Grant delegated `api://<connector-client-id>/Invitations.Create` and admin consent.
-- Record both client IDs; application client IDs, not application object IDs.
+- Add its own `Invitations.Create` delegated permission (resource app ID is its
+  own client ID), review the permissions and grant admin consent. The wizard adds
+  that one declaration only after confirmation and verifies the consent read-only.
+- Record the one Application (client) ID, not the Object ID. Both server fields
+  `Audience` and `DesktopClientId` use this same value. New desktop invitation
+  setup asks for that ID only once.
+- The public client requests `<client-id>/Invitations.Create` (GUID resource,
+  without `api://`) when client and resource are the same. Keep the exposed
+  Application ID URI `api://<client-id>` unchanged. See Microsoft's
+  [scope formats](https://learn.microsoft.com/en-us/entra/msal/msal-acquire-cache-tokens#request-scopes-for-a-web-api).
 
-If reusing prior companion registrations, inspect their IDs, assignments and
-existing permissions first; add the new role/scope without replacing unrelated
-settings. The launcher uses PKCE, not password, embedded browser or client-secret
-authentication. Resource access requires both the role and delegated scope.
+Existing saved split-registration connections remain readable for compatibility;
+this setup does not delete registrations or revoke unrelated permissions. The
+launcher uses PKCE, not password, embedded browser or client-secret authentication.
+Resource access still requires issuer, audience, tenant, authorized client, user
+ID, the staff role and delegated scope. An ID token without that scope is rejected
+even though its audience can now equal the API audience. Live assigned/unassigned
+staff sign-in is a deployment gate; synthetic tokens do not prove Entra issuance.
 ([Expose scopes and roles](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-configure-app-expose-web-apis),
 [desktop registration](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-desktop-app-configuration))
 
@@ -126,7 +139,7 @@ az deployment group create --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 -
    the approved newly built image digest and actual identity/CIPP inputs. Set
    `mountInvitationJournal=true`, `enableInvitationCreation=false`. The CIPP secret
    belongs only in this protected file/approved secret store, never command text.
-   `Audience` is the connector client GUID; `DesktopClientId` is the desktop GUID.
+   Set both `Audience` and `DesktopClientId` to the existing companion client GUID.
 
 4. Preview, inspect, then separately approve the app deployment. The app template
    only changes the companion Container App. Both feature flags default false;

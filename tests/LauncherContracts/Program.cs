@@ -10,6 +10,7 @@ var checks = 0;
 var unexpectedAcceptances = 0;
 try
 {
+    await SingleRegistrationContracts.Run(root);
     await CippContracts.Run(root);
     await InvitationContracts.Run(root);
     var menu = await Run(Path.Combine(root, "menu-exit"), [], "0\n", MustNotAccept);

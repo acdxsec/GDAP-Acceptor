@@ -79,12 +79,14 @@ settings, and **L** removes an old 0.3.0 local API credential with explicit cons
 These actions do not authenticate to a customer or
 start CIPP onboarding. Approval and CUSTOMER confirmation remain in this terminal.
 
-Staff sign-in uses the default browser and a public desktop Entra application;
-only non-secret connection identifiers are stored locally. Staff tokens stay in
+Staff sign-in uses the default browser and the same Entra registration as the API,
+configured with a public desktop callback; a second companion registration is not required.
+Only non-secret connection identifiers are stored locally. Staff tokens stay in
 memory and are separate from customer approval cookies. The central host holds
 one dedicated CIPP client credential in a mounted secret file, never in the image
 or workstation package. Invitation creation requires Tenant.Relationship.ReadWrite
-and an assigned Invitations.Create staff role/scope, not the old read-only setup.
+and an assigned Invitations.Creator staff role plus Invitations.Create delegated
+scope, not the old read-only setup. The role and scope values must be distinct.
 See [setup and limitations](docs/INVITATION-WORKFLOW.md).
 
 You can also pass the full URL as a single quoted command-line argument.

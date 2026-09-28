@@ -11,8 +11,8 @@
     "settings": {
       "value": {
         "IdentityTenantId": "REPLACE_STAFF_TENANT_ID",
-        "Audience": "REPLACE_CENTRAL_API_APP_ID",
-        "DesktopClientId": "REPLACE_DESKTOP_APP_ID",
+        "Audience": "REPLACE_COMPANION_APP_ID",
+        "DesktopClientId": "REPLACE_COMPANION_APP_ID",
         "CippOrigin": "https://cippabcmq.azurewebsites.net",
         "PartnerTenantId": "39851031-8246-4fdc-941b-b504fcb5df10",
         "CippApiOrigin": "https://REPLACE_WITH_CIPP_API_ORIGIN",

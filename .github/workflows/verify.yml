@@ -16,6 +16,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Authenticated central HTTP contracts
         run: dotnet run --project tests/ServerContracts
+      - name: Single-registration central HTTP contracts
+        run: dotnet run --project tests/ServerContracts -- --single-registration
       - name: Install pinned Azure template compiler (no deployment)
         run: az bicep install --version v0.47.16
       - name: Validate Azure resource and security contracts (offline)

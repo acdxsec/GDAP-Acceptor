@@ -11,7 +11,8 @@ public sealed record CreatedInvitation(int Version, string OperationId, string C
 public static class InvitationProtocol
 {
     public const string Scope = "Invitations.Create";
-    public const string Role = "Invitations.Create";
+    // Entra scopes and app roles share a value namespace on this registration.
+    public const string Role = "Invitations.Creator";
     public const string MicrosoftPrefix = "https://admin.microsoft.com/AdminPortal/Home#/partners/invitation/granularAdminRelationships/";
     public static string Onboarding(string origin, string relationship) => StatusProtocol.Origin(origin) + "/tenant/gdap-management/onboarding/start?id=" + Uri.EscapeDataString(relationship);
     public static void Validate(CreateInvitation request)

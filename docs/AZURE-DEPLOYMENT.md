@@ -77,8 +77,8 @@ still required. Process restarts discard cached CIPP tokens/results and limits.
 
 The status-only image and templates in this runbook do not enable the new
 [invitation creation workflow](INVITATION-WORKFLOW.md). The hosting environment
-can be reused, but a durable shared creation journal, Invitations.Create staff
-scope/role and Tenant.Relationship.ReadWrite CIPP access are required. Do not
+can be reused, but a durable shared creation journal, Invitations.Create delegated
+scope, Invitations.Creator staff role and Tenant.Relationship.ReadWrite CIPP access are required. Do not
 deploy the earlier image or create status-only permissions for the new workflow.
 Optional persistent-storage wiring is now prepared in `journal.bicep` and
 `application.bicep`; it remains disabled by default and requires approval/live

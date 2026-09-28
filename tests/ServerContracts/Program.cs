@@ -28,6 +28,8 @@ var settings = new ServiceSettings
     CippAuthenticationTenantId = "55555555-5555-5555-5555-555555555555", CippClientId = "66666666-6666-6666-6666-666666666666",
     CippScope = "api://66666666-6666-6666-6666-666666666666/.default", SecretFile = secretFile
 };
+if (args.Contains("--single-registration", StringComparer.Ordinal)) settings.DesktopClientId = settings.Audience;
+settings.Validate();
 using var rsa = RSA.Create(2048);
 var key = new RsaSecurityKey(rsa) { KeyId = "synthetic-test-key" };
 var peer = new Peer();
@@ -59,10 +61,10 @@ try
         request.Headers.Add("X-Forwarded-For", "127.0.0.1");
         return await client.SendAsync(request);
     }
-    string Token(string? omit = null, string? audience = null, string? issuer = null, DateTime? expiry = null, bool wrongKey = false, bool unsigned = false, string? replace = null, bool invitations = false)
+    string Token(string? omit = null, string? audience = null, string? issuer = null, DateTime? expiry = null, bool wrongKey = false, bool unsigned = false, string? replace = null, bool invitations = false, string? scope = null, string? role = null)
     {
         var claims = new[] { new Claim("tid", settings.IdentityTenantId), new Claim("ver", "2.0"), new Claim("azp", settings.DesktopClientId),
-            new Claim("scp", invitations ? InvitationProtocol.Scope : "Status.Read"), new Claim("roles", invitations ? InvitationProtocol.Role : "Onboarding.Read"), new Claim("oid", "77777777-7777-7777-7777-777777777777") }.Where(c => c.Type != omit).Select(c => c.Type == replace ? new Claim(c.Type, "88888888-8888-8888-8888-888888888888") : c);
+            new Claim("scp", scope ?? (invitations ? InvitationProtocol.Scope : "Status.Read")), new Claim("roles", role ?? (invitations ? InvitationProtocol.Role : "Onboarding.Read")), new Claim("oid", "77777777-7777-7777-7777-777777777777") }.Where(c => c.Type != omit).Select(c => c.Type == replace ? new Claim(c.Type, "88888888-8888-8888-8888-888888888888") : c);
         using var other = RSA.Create(2048);
         var signing = unsigned ? null : new SigningCredentials(wrongKey ? new RsaSecurityKey(other) { KeyId = key.KeyId } : key, SecurityAlgorithms.RsaSha256);
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(issuer ?? settings.Authority, audience ?? settings.Audience, claims,
@@ -70,7 +72,7 @@ try
     }
     var health = await Get("/healthz");
     Assert(health.StatusCode == HttpStatusCode.OK && peer.Calls.Count == 0, "Liveness called CIPP");
-    foreach (var token in new string?[] { null, "not-a-token", Token(wrongKey: true), Token(unsigned: true), Token(audience: settings.DesktopClientId), Token(issuer: "https://untrusted.example"), Token(expiry: DateTime.UtcNow.AddMinutes(-5)) })
+    foreach (var token in new string?[] { null, "not-a-token", Token(wrongKey: true), Token(unsigned: true), Token(audience: "88888888-8888-8888-8888-888888888888"), Token(issuer: "https://untrusted.example"), Token(expiry: DateTime.UtcNow.AddMinutes(-5)) })
     {
         using var denied = await Get("/v1/onboarding/relationship-1", token);
         Assert(denied.StatusCode == HttpStatusCode.Unauthorized && peer.Calls.Count == 0, "Invalid token reached CIPP");
@@ -92,8 +94,20 @@ try
         using var denied = await Get("/v1/invitations/connection", Token(omit: claim, invitations: true));
         Assert(denied.StatusCode == HttpStatusCode.Forbidden && peer.Calls.Count == 0, "Invitation identity claim missing: " + claim);
     }
-    using var creatorConnection = await Get("/v1/invitations/connection", Token(invitations: true));
-    Assert(creatorConnection.IsSuccessStatusCode && peer.Calls.Count == 0, "Creator metadata requires old status role");
+    // Literal registration values deliberately do not derive from implementation
+    // constants: Entra scopes and app roles must not share the same value.
+    using var creatorConnection = await Get("/v1/invitations/connection", Token(scope: "Invitations.Create", role: "Invitations.Creator"));
+    Assert(creatorConnection.IsSuccessStatusCode && peer.Calls.Count == 0, "Distinct Invitations.Create scope / Invitations.Creator staff role rejected");
+    Assert(InvitationProtocol.Scope == "Invitations.Create" && InvitationProtocol.Role == "Invitations.Creator", "Invitation registration contract drifted");
+    foreach (var (scope, role) in new[] { ("Invitations.Create", "Invitations.Create"), ("Invitations.Creator", "Invitations.Creator"), ("Invitations.Creator", "Invitations.Create"), ("Status.Read", "Invitations.Creator"), ("Invitations.Create", "Onboarding.Read") })
+    {
+        using var denied = await Get("/v1/invitations/connection", Token(scope: scope, role: role));
+        Assert(denied.StatusCode == HttpStatusCode.Forbidden && peer.Calls.Count == 0, "Conflicting, swapped or unrelated invitation scope/role accepted");
+    }
+    Console.WriteLine("PASS: distinct delegated scope and staff app role required; legacy, swapped and unrelated values denied");
+    Console.WriteLine(settings.DesktopClientId == settings.Audience
+        ? "PASS: single-registration audience and authorized-party checks; missing scope/role (including ID-token-shaped claims) denied"
+        : "PASS: existing split-registration authorization remains supported");
     using var gated = new HttpRequestMessage(HttpMethod.Post, "/v1/invitations") { Content = JsonContent.Create(new { }) };
     gated.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token(invitations: true));
     using var gatedResponse = await client.SendAsync(gated);

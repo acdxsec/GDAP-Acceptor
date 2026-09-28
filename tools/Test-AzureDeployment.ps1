@@ -64,6 +64,7 @@ try {
     $example = Get-Content (Join-Path $root 'deploy/azure/application.parameters.example.json') -Raw | ConvertFrom-Json -AsHashtable
     $expected = Get-Content (Join-Path $root 'deploy/settings.example.json') -Raw | ConvertFrom-Json -AsHashtable
     Assert-Contract ($example.parameters.mountInvitationJournal.value -eq $true -and $example.parameters.enableInvitationCreation.value -eq $false) 'Example must mount for validation while leaving creation disabled.'
+    Assert-Contract ($example.parameters.settings.value.Audience -eq 'REPLACE_COMPANION_APP_ID' -and $example.parameters.settings.value.DesktopClientId -eq $example.parameters.settings.value.Audience) 'Invitation setup must use one companion registration for both audience and desktop client.'
     Assert-Contract ((($example.parameters.settings.value.Keys | Sort-Object) -join ',') -eq (($expected.Keys | Sort-Object) -join ',')) 'Azure settings must match the existing service configuration contract.'
     $publisher = Get-Content (Join-Path $root '.github/workflows/publish-status-image.yml') -Raw
     Assert-Contract ($publisher -match '(?m)^  workflow_dispatch:' -and $publisher -notmatch '(?m)^  (push|pull_request|workflow_run|schedule):') 'Image publication must remain manual, not triggered by ordinary CI.'

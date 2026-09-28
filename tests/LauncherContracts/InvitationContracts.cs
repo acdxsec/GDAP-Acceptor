@@ -11,7 +11,7 @@ internal static class InvitationContracts
         var id = "11111111-1111-1111-1111-111111111111";
         var partner = "22222222-2222-2222-2222-222222222222";
         var instance = new Instance("https://cipp.example", partner);
-        var connection = new CentralConnection(instance, "https://connector.example", partner, "33333333-3333-3333-3333-333333333333", "44444444-4444-4444-4444-444444444444");
+        var connection = new CentralConnection(instance, "https://connector.example", partner, "33333333-3333-3333-3333-333333333333", "33333333-3333-3333-3333-333333333333");
         new LocalState(directory).Enroll(id, instance);
         File.WriteAllText(Path.Combine(directory, "central-status-" + id + ".json"), JsonSerializer.Serialize(connection));
         var peer = new Peer(partner);
