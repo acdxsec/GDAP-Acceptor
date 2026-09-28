@@ -1,5 +1,8 @@
 # Central onboarding status — implementation plan
 
+> Superseded by [invitation creation and browser handoff](INVITATION-WORKFLOW.md).
+> Retained as history, not the current implementation/deployment plan.
+
 Status: implemented in 0.4.0 development source; deployment and live authentication pending.
 No resources, Entra registrations, credentials or CIPP settings have been changed.
 The 0.3.0 workstation connector is not this implementation.

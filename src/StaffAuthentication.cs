@@ -7,7 +7,13 @@ internal sealed class StaffAuthentication
     private CentralConnection? selected;
     private IPublicClientApplication? app;
     private IAccount? account;
-    internal async Task<string> Token(CentralConnection connection, CancellationToken cancellation)
+    internal Task<string> Token(CentralConnection connection, CancellationToken cancellation) => Acquire(connection, "Status.Read", cancellation);
+    internal Task<string> InvitationToken(CentralConnection connection, CancellationToken cancellation) => Acquire(connection, Gdap.Status.InvitationProtocol.Scope, cancellation);
+    // A client requesting its own API uses the GUID resource form. Preserve the
+    // URI form for previously configured separate-client deployments.
+    internal static string RequestScope(CentralConnection connection, string scope) =>
+        connection.ClientId == connection.ApiId ? $"{connection.ApiId}/{scope}" : $"api://{connection.ApiId}/{scope}";
+    private async Task<string> Acquire(CentralConnection connection, string scope, CancellationToken cancellation)
     {
         if (selected != connection)
         {
@@ -16,7 +22,7 @@ internal sealed class StaffAuthentication
                 .WithRedirectUri("http://localhost").Build();
             selected = connection; account = null;
         }
-        var scopes = new[] { $"api://{connection.ApiId}/Status.Read" };
+        var scopes = new[] { RequestScope(connection, scope) };
         AuthenticationResult result;
         try
         {

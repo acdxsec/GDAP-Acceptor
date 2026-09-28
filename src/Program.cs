@@ -31,6 +31,7 @@ internal static class Acceptor
     }
 
     internal static string OnboardingUrl(Instance instance) => ValidateBaseUrl(instance.BaseUrl) + "/tenant/gdap-management/onboarding";
+    internal static string OnboardingUrl(Instance instance, string relationship) => Gdap.Status.InvitationProtocol.Onboarding(ValidateBaseUrl(instance.BaseUrl), relationship);
 
     private static string Configure(LocalState local)
     {
@@ -84,12 +85,13 @@ internal static class Acceptor
     internal static async Task<int> Run(string[] args)
     {
         using var cipp = new CippStatus(State);
-        return await Run(args, State, (invitation, instance) => Accept(invitation, instance, State), cipp);
+        using var creationConnection = new CippStatus(State, new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseDefaultCredentials = false }, new StaffAuthentication().InvitationToken, new OsCredentialVault());
+        return await Run(args, State, (invitation, instance) => Accept(invitation, instance, State), cipp, new CippInvitations(State, creationConnection), OpenBrowser);
     }
 
     // Tests supply isolated state and an acceptance adapter; no CLI/environment
     // override can redirect the production payload or silently select a tenant.
-    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept, CippStatus? cipp = null)
+    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept, CippStatus? cipp = null, CippInvitations? invitations = null, Action<string>? openBrowser = null)
     {
         try
         {
@@ -98,11 +100,25 @@ internal static class Acceptor
             {
                 Console.WriteLine("gdap-acceptor [<Microsoft-invitation-url>] | configure | queue status | queue resolve | diagnostics export <new-file> | self-test");
                 Console.WriteLine("With no arguments: open the guided workspace for acceptance, queue/recovery, settings and diagnostics. You can still paste an invitation at its home prompt. Customer identity is confirmed after fresh browser sign-in.");
-                Console.WriteLine("Central read-only status: cipp configure | cipp disconnect | cipp remove-legacy-credential | cipp status <Microsoft-invitation-url> | cipp watch <Microsoft-invitation-url>");
+                Console.WriteLine("Invitation workflow: create | connector configure | cipp open <Microsoft-invitation-url>. Existing-invitation acceptance needs no connector.");
                 return 0;
             }
             var local = new LocalState(stateDirectory);
-            if (args.Length == 0) return await GuidedConsole.Run(local, command => Run(command, stateDirectory, accept, cipp));
+            if (args.Length == 0) return await GuidedConsole.Run(local, command => Run(command, stateDirectory, accept, cipp, invitations, openBrowser));
+            if (args.SequenceEqual(new[] { "connector", "configure" }) || args.SequenceEqual(new[] { "create" }))
+            {
+                if (invitations is null) { Console.WriteLine("Invitation connector is unavailable."); return 1; }
+                var id = SelectInstance(local);
+                var instance = local.ReadInstances()[id];
+                return args[0] == "connector" ? await invitations.Configure(id, instance) : await invitations.Run(id, instance,
+                    (invite, _) => Run([$"gdap-acceptor://v1/accept/{invite.InstanceId}/{invite.RelationshipId}"], stateDirectory, accept, cipp, invitations, openBrowser));
+            }
+            if (args.Length == 3 && args[0] == "cipp" && args[1] == "open")
+            {
+                var relationship = ParseMicrosoftInvitation(args[2]);
+                OpenOnboarding(local.ReadInstances()[SelectInstance(local)], relationship, openBrowser);
+                return 0;
+            }
             if (cipp is not null && args.SequenceEqual(new[] { "cipp", "configure" }))
             {
                 var id = SelectInstance(local);
@@ -191,11 +207,12 @@ internal static class Acceptor
                 // explicit operator review, even when the child has stopped.
                 if (accepted is AcceptanceOutcome.Stopped or AcceptanceOutcome.Active) local.Complete(claim);
                 else Console.WriteLine("Acceptance outcome requires review. Reservation retained. Inspect Microsoft/CIPP, then use queue resolve; do not retry approval.");
-                // A successful approval is completed before independent status
-                // work. CIPP errors/cancellation must never retain or replay it.
-                if (accepted == AcceptanceOutcome.Active && cipp is not null)
-                    await cipp.Watch(claim.Active.Invitation, claim.Active.Instance);
-                else if (accepted == AcceptanceOutcome.Active) Console.WriteLine("CIPP onboarding has NOT been verified here.");
+                // Completion hands off to CIPP's own page, never staff status polling.
+                if (accepted == AcceptanceOutcome.Active)
+                {
+                    Console.WriteLine("CIPP onboarding has NOT been verified here. Existing CIPP automation handles the approval event; do not approve again or submit another onboarding job.");
+                    OpenOnboarding(claim.Active.Instance, claim.Active.Invitation.RelationshipId, openBrowser);
+                }
                 return accepted == AcceptanceOutcome.Active ? 0 : 1;
             }
             Console.WriteLine("The pending invitation expired or is no longer available. Acceptance was not confirmed.");
@@ -251,13 +268,19 @@ internal static class Acceptor
         catch (UnauthorizedAccessException) { Console.WriteLine("Could not save local diagnostics. The acceptance result below is unchanged."); }
         if (outcome != AcceptanceOutcome.Active) { Console.WriteLine("Acceptance not confirmed. Inspect the Microsoft relationship outcome before any further action."); return outcome; }
         Console.WriteLine("ACCEPT INVITATION | Step 4 of 4: return to CIPP");
-        Console.WriteLine("GDAP relationship is ACTIVE. CIPP status verification is separate from this approval result.");
+        Console.WriteLine("GDAP relationship is ACTIVE.");
         Console.WriteLine("Existing CIPP Automated Onboarding processes Microsoft's approval event on its schedule; Microsoft propagation can add a further delay. Do not approve again.");
-        var returnUrl = OnboardingUrl(instance);
-        Console.WriteLine($"CIPP onboarding: {returnUrl}\nFind relationship: {invitation.RelationshipId}");
-        try { Process.Start(new ProcessStartInfo(returnUrl) { UseShellExecute = true }); }
-        catch { Console.WriteLine("Could not open the default browser. Use the CIPP URL above. GDAP acceptance succeeded; do not repeat it."); }
         return AcceptanceOutcome.Active;
+    }
+
+    private static void OpenBrowser(string url) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    private static void OpenOnboarding(Instance instance, string relationship, Action<string>? openBrowser)
+    {
+        var url = OnboardingUrl(instance, relationship);
+        Console.WriteLine($"CIPP onboarding: {url}\nRelationship: {relationship}");
+        Console.WriteLine("CIPP may need time to receive the webhook. Refresh its page if the record is not visible yet.");
+        try { openBrowser?.Invoke(url); }
+        catch { Console.WriteLine("Could not open the default browser. Use the CIPP URL above; do not repeat approval."); }
     }
 
     private static void SelfTest()

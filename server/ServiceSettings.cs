@@ -16,6 +16,8 @@ public sealed class ServiceSettings
     public string CippScope { get; set; } = "";
     // Set by the host, never supplied over HTTP or serialized in metadata.
     internal string SecretFile { get; set; } = "/run/secrets/cipp-client-secret";
+    // Null deliberately disables invitation writes in existing status deployments.
+    internal string? InvitationJournalDirectory { get; set; }
     public string Authority => $"https://login.microsoftonline.com/{IdentityTenantId}/v2.0";
 
     internal void Validate()
@@ -41,6 +43,7 @@ public sealed class ServiceSettings
         if (new FileInfo(file).Length > 16384) throw new InvalidDataException();
         var settings = JsonSerializer.Deserialize<ServiceSettings>(File.ReadAllText(file)) ?? throw new InvalidDataException();
         settings.SecretFile = Environment.GetEnvironmentVariable("GDAP_CIPP_SECRET_FILE") ?? settings.SecretFile;
+        settings.InvitationJournalDirectory = Environment.GetEnvironmentVariable("GDAP_INVITATION_JOURNAL_DIR");
         settings.Validate();
         return settings;
     }
