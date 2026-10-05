@@ -22,7 +22,9 @@ $unsigned = Get-AuthenticodeSignature -LiteralPath (Join-Path $FixtureDirectory 
 if ($unsigned.Status -ne 'NotSigned' -or $null -ne $unsigned.SignerCertificate) { throw 'Unsigned negative control was not rejected.' }
 Write-Output 'PASS: unsigned control has no signer and is NotSigned.'
 
-$stores = @('Cert:\CurrentUser\Root', 'Cert:\CurrentUser\TrustedPublisher')
+# CurrentUser Root import displays a consent dialog on a headless runner.
+# Use the disposable runner's machine stores; never run this on an operator PC.
+$stores = @('Cert:\LocalMachine\Root', 'Cert:\LocalMachine\TrustedPublisher')
 foreach ($store in $stores) {
     if (Test-Path -LiteralPath "$store\$expectedThumbprint") { throw 'Disposable runner already trusts this certificate; refusing to change pre-existing trust.' }
 }
