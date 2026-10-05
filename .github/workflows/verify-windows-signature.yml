@@ -1,0 +1,24 @@
+name: Verify exact internal Windows signatures
+on:
+  push:
+    branches: [codex/windows-signature-verification]
+    paths:
+      - '.github/workflows/verify-windows-signature.yml'
+      - 'tools/Test-WindowsSignature.ps1'
+      - 'tests/fixtures/windows-signature/**'
+permissions:
+  contents: read
+jobs:
+  windows-signature:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify with Windows PowerShell and Windows trust APIs
+        shell: powershell
+        run: ./tools/Test-WindowsSignature.ps1
+      - name: Verify with PowerShell 7 and Windows trust APIs
+        shell: pwsh
+        run: ./tools/Test-WindowsSignature.ps1
