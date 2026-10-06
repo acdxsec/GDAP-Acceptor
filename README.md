@@ -4,17 +4,24 @@ Standalone Windows/Linux launcher for an MSP operator accepting a Microsoft GDAP
 invitation created by **unmodified CIPP**. No CIPP custom page, custom image,
 custom API, or locally installed M365Internals checkout is needed.
 
-Download the [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
-for Windows/Linux installers, portable packages, checksums and installation instructions.
+Download [version 0.4.2](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.4.2)
+for the generic Windows portable package and checksums. The launcher EXE and DLL
+are signed with the project's existing internal certificate, not a public CA.
+See [installation, trust boundaries and recovery](docs/RELEASE-0.4.2.md).
+The older [unsigned 0.1.6 prerelease](https://github.com/acdxsec/GDAP-Acceptor/releases/tag/v0.1.6)
+remains available for historical Windows/Linux installers; it lacks invitation creation.
 
-Current development adds **Create/resume invitation through CIPP → customer
+Version 0.4.2 supports **Create/resume invitation through CIPP → customer
 acceptance → open the relationship's CIPP onboarding page**. It replaces the
 unrequested post-approval status-watch flow. Existing CIPP automation still owns
 onboarding. Invitation creation uses an authenticated connector so no CIPP secret
 is distributed to workstations. Pasting an existing invitation needs no connector.
 See [invitation workflow and deployment gates](docs/INVITATION-WORKFLOW.md).
-This code is not in the published 0.1.6 downloads or the earlier status-only image.
-Live creation remains disabled until durable storage and creation permissions are
+The operator confirmed this complete Windows workflow on October 6, 2026,
+using a deployment-configured build. Final CIPP onboarding completion remains
+CIPP's responsibility. Generic builds use the same workflow but require connection
+setup on a new workstation. Existing saved settings remain unchanged.
+For new deployments, creation remains disabled until durable storage and creation permissions are
 configured. [Azure setup](docs/AZURE-INVITATIONS.md) now includes an isolated
 pay-as-you-go journal mount and an offline persistence probe; creation is disabled
 by default until the live checks pass.

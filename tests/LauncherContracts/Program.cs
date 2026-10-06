@@ -10,8 +10,18 @@ var checks = 0;
 var unexpectedAcceptances = 0;
 try
 {
+    if (args.SequenceEqual(new[] { "invitations-only" }))
+    {
+        await InvitationDeadlineContracts.Run(root);
+        await InvitationReviewContracts.Run(root);
+        await InvitationContracts.Run(root);
+        return 0;
+    }
     await SingleRegistrationContracts.Run(root);
+    await DeploymentProfileContracts.Run(root);
     await CippContracts.Run(root);
+    await InvitationDeadlineContracts.Run(root);
+    await InvitationReviewContracts.Run(root);
     await InvitationContracts.Run(root);
     var menu = await Run(Path.Combine(root, "menu-exit"), [], "0\n", MustNotAccept);
     Assert(menu.Code == 0 && menu.Output.Contains("1. Accept invitation") && menu.Output.Contains("2. Queue and recovery"), "Guided home menu is missing or exiting starts acceptance");

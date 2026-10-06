@@ -113,9 +113,9 @@ jobs:
         shell: pwsh
         run: |
           ./tools/Build-Installers.ps1
-          ./tools/Build-Installers.ps1 -Version 0.4.1 -OutputDirectory dist/upgrade-test
+          ./tools/Build-Installers.ps1 -Version 0.4.3 -OutputDirectory dist/upgrade-test
           ./tools/Test-Installers.ps1 -Directory dist/installers
-          ./tools/Test-Installers.ps1 -Directory dist/upgrade-test -Version 0.4.1
+          ./tools/Test-Installers.ps1 -Directory dist/upgrade-test -Version 0.4.3
       - uses: actions/upload-artifact@v4
         with:
           name: unsigned-development-installers
@@ -137,7 +137,7 @@ jobs:
           path: dist
       - name: Isolated per-user installer lifecycle
         shell: pwsh
-        run: ./tools/Test-WindowsInstaller.ps1 -Msi dist/installers/gdap-acceptor-0.4.0-x64.msi -UpgradeMsi dist/upgrade-test/gdap-acceptor-0.4.1-x64.msi
+        run: ./tools/Test-WindowsInstaller.ps1 -Msi dist/installers/gdap-acceptor-0.4.2-x64.msi -UpgradeMsi dist/upgrade-test/gdap-acceptor-0.4.3-x64.msi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

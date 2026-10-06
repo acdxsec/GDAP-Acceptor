@@ -6,10 +6,11 @@
     <Nullable>enable</Nullable>
     <AssemblyName>gdap-acceptor</AssemblyName>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <Version>0.4.0</Version>
+    <Version>0.4.2</Version>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="$(DeploymentProfile)" LogicalName="Gdap.DeploymentProfile" Condition="'$(DeploymentProfile)' != ''" />
     <PackageReference Include="Microsoft.Identity.Client" Version="4.90.0" />
     <ProjectReference Include="../shared/StatusProtocol.csproj" />
     <InternalsVisibleTo Include="StateContracts" />

@@ -1,5 +1,15 @@
 # Signing readiness
 
+## October 6, 2026 update
+
+Paid signing remains declined. Windows 0.4.2 uses the existing internal
+certificate to sign and timestamp the launcher EXE and DLL. This is not a
+publicly trusted CA signature and does not override Defender ASR, SmartScreen,
+App Control or PowerShell policy. Private signing material remains off GitHub.
+See [0.4.2 distribution instructions](RELEASE-0.4.2.md). The research and earlier
+unsigned-development decisions below are historical, not a request to purchase
+a service.
+
 Research checked 2026-09-22. This is a readiness assessment and proposed workflow, not an implemented signing pipeline.
 
 **Decision: paid signing declined.** The user chose to continue with unsigned
