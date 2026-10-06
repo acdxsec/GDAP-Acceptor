@@ -11,7 +11,7 @@ group as CIPP. The user superseded the Ubuntu-host plan. Use
 No Azure resources or live staff/CIPP authentication have been verified or
 deployed. No custom CIPP build, webhook modification or new onboarding job is
 needed. Customer acceptance is unchanged. Azure's generated HTTPS origin is the
-initial companion address; `cippapi.fizlian.dev` is optional later.
+initial companion address; `connector.example` is optional later.
 The lower-cost revision uses HTTP scale-to-zero and a public GHCR image, not
 paid ACR. Retained companion logs require an explicit decision; CIPP's existing
 onboarding logs are unaffected. Previous five-resource previews are superseded.
@@ -74,7 +74,7 @@ Do not infer these from the portal URL. Only public-cloud Microsoft authenticati
 is supported. CIPP IP restrictions must match the **central service's actual
 outbound public IP**, not workstation IPs or the frontend/DNS address. The basic
 Azure template does not provide fixed egress: resolve that requirement before
-deployment with a separately reviewed network design. Do not use `96.11.28.184`
+deployment with a separately reviewed network design. Do not use `an unrelated server address`
 for Azure egress.
 IP restrictions are optional; authentication/authorization remain mandatory.
 
@@ -117,7 +117,7 @@ No server or DNS changes were performed during development. Before starting:
 
 **Included HTTPS proxy:** from the source root run
 `docker compose -f deploy/compose.yml --profile https up -d --build`.
-Caddy serves `cippapi.fizlian.dev`; certificate state is in persistent named
+Caddy serves `connector.example`; certificate state is in persistent named
 volumes. Do not delete those volumes during upgrades.
 
 **Existing reverse proxy:** run

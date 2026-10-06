@@ -42,8 +42,8 @@ internal sealed class CippStatus : IDisposable
             Console.WriteLine(invitations
             ? "CIPP connector setup. Use the existing companion app registration for both staff sign-in and API access. No second registration or CIPP secret is needed on this computer."
             : "CIPP connector setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
-            var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address [https://cippapi.fizlian.dev]: ");
-            var endpoint = StatusProtocol.Origin(origin.Length == 0 && !invitations ? "https://cippapi.fizlian.dev" : origin);
+            var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address (from your administrator): ");
+            var endpoint = StatusProtocol.Origin(origin);
             var tenantId = StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: "));
             var clientId = StatusProtocol.GuidValue(Ask(invitations ? "Companion Application (client) ID (existing registration): " : "Companion desktop application/client ID: "));
             var apiId = invitations ? clientId : StatusProtocol.GuidValue(Ask("Connector application/client ID: "));

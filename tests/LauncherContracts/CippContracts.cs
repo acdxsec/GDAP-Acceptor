@@ -7,7 +7,7 @@ using Gdap.Status;
 internal static class CippContracts
 {
     private const string Partner = "22222222-2222-2222-2222-222222222222";
-    private const string Setup = "\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\n44444444-4444-4444-4444-444444444444\nCONNECT\n";
+    private const string Setup = "https://connector.example\n22222222-2222-2222-2222-222222222222\n33333333-3333-3333-3333-333333333333\n44444444-4444-4444-4444-444444444444\nCONNECT\n";
     internal static async Task Run(string root)
     {
         var state = Path.Combine(root, "central-status");
@@ -21,14 +21,16 @@ internal static class CippContracts
         Task<string> SignIn(CentralConnection connection, CancellationToken cancellation)
         {
             cancellation.ThrowIfCancellationRequested(); signIns++;
-            Assert(connection.Origin == "https://cippapi.fizlian.dev" && connection.Instance == instance && connection.ClientId == "33333333-3333-3333-3333-333333333333", "Unvalidated sign-in settings");
+            Assert(connection.Origin == "https://connector.example" && connection.Instance == instance && connection.ClientId == "33333333-3333-3333-3333-333333333333", "Unvalidated sign-in settings");
             return Task.FromResult("synthetic-staff-token");
         }
         using var connector = new CippStatus(state, peer, SignIn, legacy);
         var result = await Launch(state, ["cipp", "status", url], "", connector);
         Assert(result.Code != 0 && result.Output.Contains("not configured") && signIns == 0 && peer.Calls.Count == 0, "Unconfigured status performed authentication");
+        result = await Launch(state, ["cipp", "configure"], "\n", connector);
+        Assert(result.Code != 0 && signIns == 0 && peer.Calls.Count == 0, "Blank endpoint used an implicit organization host");
         result = await Launch(state, ["cipp", "configure"], Setup, connector);
-        Assert(result.Code == 0 && result.Output.Contains("Central connection saved") && peer.Calls.SequenceEqual(new[] { "GET https://cippapi.fizlian.dev/v1/connection" }), "Central setup failed or called CIPP directly");
+        Assert(result.Code == 0 && result.Output.Contains("Central connection saved") && peer.Calls.SequenceEqual(new[] { "GET https://connector.example/v1/connection" }), "Central setup failed or called CIPP directly");
         var configFile = Path.Combine(state, "central-status-" + id + ".json");
         var saved = File.ReadAllText(configFile);
         Assert(!saved.Contains("synthetic-staff-token") && !saved.Contains("ClientSecret") && legacy.Keys.Count == 0, "Setup persisted credentials or accessed old vault");
@@ -97,7 +99,7 @@ internal static class CippContracts
         result = await Launch(state, [url], "", cancelled, (_, _) => Task.FromResult(AcceptanceOutcome.Active));
         Assert(result.Code == 0 && result.Output.Contains("/onboarding/start?id=relationship-1") && new LocalState(state).Active() is null, "Acceptance must not start staff authentication");
         var beforeBad = signIns;
-        foreach (var origin in new[] { "http://cippapi.fizlian.dev", "https://user:secret@cippapi.fizlian.dev", "https://cippapi.fizlian.dev/path", "https://cippapi.fizlian.dev/?token=secret" })
+        foreach (var origin in new[] { "http://connector.example", "https://user:secret@connector.example", "https://connector.example/path", "https://connector.example/?token=secret" })
         {
             result = await Launch(state, ["cipp", "configure"], origin + "\n", connector);
             Assert(result.Code != 0 && File.ReadAllText(configFile) == saved && signIns == beforeBad, "Unsafe destination authenticated");
@@ -152,7 +154,7 @@ internal static class CippContracts
         internal TimeSpan ResponseDelay;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
         {
-            Assert(request.Method == HttpMethod.Get && request.RequestUri?.Host == "cippapi.fizlian.dev" && request.Headers.Authorization?.ToString() == "Bearer synthetic-staff-token", "Unexpected destination, method or credential");
+            Assert(request.Method == HttpMethod.Get && request.RequestUri?.Host == "connector.example" && request.Headers.Authorization?.ToString() == "Bearer synthetic-staff-token", "Unexpected destination, method or credential");
             Calls.Add(request.Method + " " + request.RequestUri);
             if (ResponseDelay > TimeSpan.Zero) await Task.Delay(ResponseDelay, token);
             var json = Code != HttpStatusCode.OK ? "PRIVATE_SECRET" : request.RequestUri!.AbsolutePath == "/v1/connection"

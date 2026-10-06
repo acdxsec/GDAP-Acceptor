@@ -25,7 +25,7 @@ CIPP, superseding the earlier Ubuntu Docker host. Deploy a separate Container
 App and environment with optional retained logging. Use an approved public GHCR
 image and scale from zero to one replica, without ACR or a pull identity. No CIPP app,
 plan, source or image changes. Start with Azure's HTTPS origin; custom hostname
-`cippapi.fizlian.dev` is optional. Subscription/resource-group identifiers and live
+`connector.example` is optional. Subscription/resource-group identifiers and live
 identity configuration remain deployment inputs, not inferred from the portal URL.
 Use single-tenant Entra authentication; authorize an explicitly assigned staff
 group through an application role. Authorized staff are allowed to inspect
