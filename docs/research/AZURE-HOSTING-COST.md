@@ -11,8 +11,8 @@ approved continuing with the separate scale-to-zero alternative. The latest
 templates now implement it; the ranked investigation below records the earlier
 decision process, not an instruction to share the heavily used CIPP plan.
 
-Reported existing host: Linux container Web App, plan `cippabcmq-plan`, resource
-group `CIPP-Resorces`, North Central US, subscription named Microsoft Azure
+Reported existing host: Linux container Web App, plan `example-cipp-plan`, resource
+group `CIPP-Resources`, North Central US, subscription named Microsoft Azure
 Sponsorship. SKU, instance count, spare capacity, offer ID and remaining credits
 are unverified. The separate ACA/ACR/Log Analytics proposal in
 [Azure deployment](../AZURE-DEPLOYMENT.md) is not confirmed deployed.
@@ -35,7 +35,7 @@ are unverified. The separate ACA/ACR/Log Analytics proposal in
 The evidence and prerequisites for this ordering follow. These are proposed
 alternatives; the checked-in deployment templates have not been changed.
 
-## Sharing `cippabcmq-plan`
+## Sharing `example-cipp-plan`
 
 Dedicated App Service tiers charge for plan VM instances, with apps sharing
 their CPU/memory. A separate app on unchanged capacity therefore has zero

@@ -5,18 +5,18 @@ instead of the historical status-only setup. The old published image lacks the
 creation endpoints and the offline journal probe; build/publish a reviewed new
 digest before deploying. Do not put placeholders or credentials in chat.
 
-## Exact scope
+## Confirm your deployment scope
 
-- Subscription: `7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670`.
-- Resource group: `CIPP-Resorces` (the existing spelling).
+- Subscription: `REPLACE_SUBSCRIPTION_ID`.
+- Resource group: `CIPP-Resources` (example; use your actual existing group).
 - Region: `northcentralus`.
 - Existing environment: `gdap-status-environment`. Do not recreate it or change
   its logging choice.
 - Companion Container App: `gdap-status`. Its historical name does not imply
   onboarding polling; creation and browser handoff are the normal workflow.
-- Staff tenant: `b618675e-4f91-4bc1-8ab6-3e7bc2c5cfaf`.
-- CIPP browser origin: `https://cippabcmq.azurewebsites.net`.
-- Partner tenant: `39851031-8246-4fdc-941b-b504fcb5df10`.
+- Staff tenant: `REPLACE_STAFF_TENANT_ID`.
+- CIPP browser origin: `https://cipp.example`.
+- Partner tenant: `REPLACE_PARTNER_TENANT_ID`.
 
 No change to CIPP's source, container image, App Service plan, Key Vault, storage
 or webhook settings. Authorizing a dedicated CIPP API client is a separate,
@@ -61,7 +61,7 @@ creation disabled while investigating, rather than clearing records.
 
 Use **one companion app registration** for desktop staff sign-in and the API.
 Reuse the existing `GDAP Invitation Connector`; do not create `GDAP Acceptor Desktop`.
-For this setup its client ID is `d5480b6c-2b3d-4eb5-a148-55053c24e690`.
+Record its client ID as `REPLACE_COMPANION_APP_ID` in your private configuration.
 It has no client secret. CIPP's own dedicated API client remains separate: its
 credential is used only by the Azure service and is never sent to a workstation.
 
@@ -124,14 +124,14 @@ All commands below are single lines. Never enable CLI debug or echo secret files
    the preview targets CIPP resources. A what-if success is not runtime verification.
 
 ```bash
-az deployment group what-if --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 --resource-group CIPP-Resorces --template-file deploy/azure/journal.bicep --parameters namePrefix=gdap-status location=northcentralus --mode Incremental
+az deployment group what-if --subscription REPLACE_SUBSCRIPTION_ID --resource-group CIPP-Resources --template-file deploy/azure/journal.bicep --parameters namePrefix=gdap-status location=northcentralus --mode Incremental
 ```
 
 2. Only after cost/network/preview approval, deploy that journal template in
    Incremental mode. Record only its non-secret output names.
 
 ```bash
-az deployment group create --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 --resource-group CIPP-Resorces --name gdap-invitation-journal --template-file deploy/azure/journal.bicep --parameters namePrefix=gdap-status location=northcentralus --mode Incremental --query properties.outputs
+az deployment group create --subscription REPLACE_SUBSCRIPTION_ID --resource-group CIPP-Resources --name gdap-invitation-journal --template-file deploy/azure/journal.bicep --parameters namePrefix=gdap-status location=northcentralus --mode Incremental --query properties.outputs
 ```
 
 3. Prepare a protected `deploy/azure/application.parameters.local.json` from the
@@ -146,11 +146,11 @@ az deployment group create --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 -
    creation requires both to be true. Mounting alone does not authorize creation.
 
 ```bash
-az deployment group what-if --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 --resource-group CIPP-Resorces --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
+az deployment group what-if --subscription REPLACE_SUBSCRIPTION_ID --resource-group CIPP-Resources --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
 ```
 
 ```bash
-az deployment group create --subscription 7c99b9cd-a6e2-4ca4-8ee3-68ab6ad7b670 --resource-group CIPP-Resorces --name gdap-invitation-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
+az deployment group create --subscription REPLACE_SUBSCRIPTION_ID --resource-group CIPP-Resources --name gdap-invitation-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
 ```
 
 ## Mount and authorization checks before enabling creation

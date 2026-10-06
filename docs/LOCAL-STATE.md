@@ -1,5 +1,28 @@
 # Local enrollment and queue safety
 
+## Invitation creation recovery (0.4.2)
+
+Creation attempts are separate from customer approval reservations. Menu **2**
+shows unfinished creation operation IDs even when the approval queue is empty.
+Option **6** continues read-only recovery; it never automatically resends a
+creation request. A missing server record returns `creation_not_recorded` from
+updated servers, not a generic availability error. This is not proof that an
+invitation can safely be recreated: late requests and changed storage remain
+possible.
+
+After stopping previous sessions, allowing in-flight requests to finish, and
+reviewing `[GDAP-Acceptor:<operation-id>]` in CIPP, menu **2 → C** (or `create review`)
+can archive the exact local attempt with explicit `RESOLVED` confirmation. If an
+invitation exists, accept that URL rather than generating a replacement. Review
+holds the same workflow lock as creation, preserves the original record in a
+unique `.reviewed` file, does not change enrollment, and sends no network request.
+This local recovery works with older connector servers too.
+
+Network deadlines apply to each request stage separately. No request deadline
+runs during template selection, role review, or the CREATE confirmation prompt.
+An already-cancelled submission is rejected before saving an attempt. Once a
+submission may have been sent, its attempt remains retained for outcome review.
+
 The launcher and contract tests use the same `LocalState` interface. Tests inject
 only the state directory and clock; separate processes use real files and locks.
 No test invokes authentication or supplies a production-state override to the CLI.

@@ -2,7 +2,7 @@
 // reads, so PowerShell can own its confirmation prompts in the same terminal.
 internal static class GuidedConsole
 {
-    internal static async Task<int> Run(LocalState local, Func<string[], Task<int>> execute)
+    internal static async Task<int> Run(LocalState local, Func<string[], Task<int>> execute, Func<bool>? showCreationState = null)
     {
         var lastCode = 0;
         var lastAction = "Ready. No customer authentication has started.";
@@ -42,6 +42,12 @@ internal static class GuidedConsole
                     Console.WriteLine("QUEUE AND RECOVERY | Local state, not CIPP task status");
                     Console.WriteLine($"Pending invitations: {pending.Count}");
                     foreach (var item in pending) Console.WriteLine($"  {Text(item.RelationshipId)} (instance {Text(item.InstanceId)})");
+                    if (showCreationState?.Invoke() == true)
+                    {
+                        Console.Write("C. Review a saved creation attempt | Enter to leave it unchanged: ");
+                        if (string.Equals(Console.ReadLine()?.Trim(), "c", StringComparison.OrdinalIgnoreCase))
+                            lastCode = await execute(["create", "review"]);
+                    }
                     if (active is null) Console.WriteLine("No active reservation needs review.");
                     else
                     {

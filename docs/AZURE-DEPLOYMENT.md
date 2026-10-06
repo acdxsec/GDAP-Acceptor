@@ -5,7 +5,7 @@
 > preview, creation-disabled staging and corrected permissions. Do not execute the
 > status-only identity or live-check instructions below for invitation creation.
 
-Target: the existing CIPP subscription and **CIPP-Resorces** resource group,
+Target: the existing CIPP subscription and **CIPP-Resources** resource group,
 North Central US, but **separate compute**. The B2 CIPP plan's operator-supplied
 seven-day metrics showed CPU averaging 6.74% (highest minute 82%) and memory
 averaging 69.91% (highest minute 95%). Sharing that plan is not the selected
@@ -54,7 +54,7 @@ memory. Platform maintenance or revision replacement may briefly overlap
 processes; caches/cooldowns/rate limits remain process-local, not distributed.
 
 Azure supplies a generated HTTPS origin; custom DNS is not needed initially.
-cippapi.fizlian.dev is optional later. The server still validates staff tokens.
+connector.example is optional later. The server still validates staff tokens.
 Anonymous /healthz reports process liveness only. The image remains non-root;
 platform isolation is not identical to Compose read-only-root/cap-drop settings.
 
@@ -128,13 +128,13 @@ and inspect what-if for collisions/unrelated changes. No command contains a secr
    logs, expect one resource to create, not the earlier five.
 
 ```bash
-az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resorces --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental
+az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resources --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental
 ```
 
 2. Only after reviewing the preview and cost choice, create the foundation.
 
 ```bash
-az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resorces --name gdap-status-foundation --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental --query properties.outputs
+az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resources --name gdap-status-foundation --template-file deploy/azure/foundation.bicep --parameters namePrefix=gdap-status location=northcentralus retainLogs=<true-or-false> --mode Incremental --query properties.outputs
 ```
 
 3. Make a protected copy of application.parameters.example.json named
@@ -150,13 +150,13 @@ az deployment group create --subscription '<subscription-id>' --resource-group C
    permissions and configuration too. Do not share raw secret-bearing output.
 
 ```bash
-az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resorces --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
+az deployment group what-if --subscription '<subscription-id>' --resource-group CIPP-Resources --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental
 ```
 
 5. After approval, deploy and obtain the generated HTTPS origin.
 
 ```bash
-az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resorces --name gdap-status-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
+az deployment group create --subscription '<subscription-id>' --resource-group CIPP-Resources --name gdap-status-application --template-file deploy/azure/application.bicep --parameters @deploy/azure/application.parameters.local.json --mode Incremental --query properties.outputs.companionOrigin.value --output tsv
 ```
 
 The unchanged server file contract mounts settings at /config/settings.json

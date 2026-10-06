@@ -31,8 +31,8 @@ Menu **5** opens this same relationship-specific page for a pasted invitation.
 ## Permissions and configuration
 
 Use the user-confirmed staff tenant
-`b618675e-4f91-4bc1-8ab6-3e7bc2c5cfaf`. Hosting remains in the existing sponsorship
-subscription; partner binding remains `39851031-8246-4fdc-941b-b504fcb5df10`.
+`REPLACE_STAFF_TENANT_ID`. Hosting remains in the existing sponsorship
+subscription; partner binding remains `REPLACE_PARTNER_TENANT_ID`.
 
 - One companion registration for desktop sign-in and API access: single tenant, v2 access tokens,
   `api://<app-id>`, admin-consent delegated scope **Invitations.Create** and an

@@ -13,3 +13,4 @@ deploy/settings.json
 deploy/secrets/
 deploy/azure/*.local.json
 deploy/azure/*.compiled.json
+deploy/desktop/*.local.json

@@ -33,17 +33,26 @@ internal static class Acceptor
     internal static string OnboardingUrl(Instance instance) => ValidateBaseUrl(instance.BaseUrl) + "/tenant/gdap-management/onboarding";
     internal static string OnboardingUrl(Instance instance, string relationship) => Gdap.Status.InvitationProtocol.Onboarding(ValidateBaseUrl(instance.BaseUrl), relationship);
 
-    private static string Configure(LocalState local)
+    private static string Configure(LocalState local, DeploymentProfile? profile = null)
     {
         Console.WriteLine("One-time local setup. This does not change CIPP or create a GDAP invitation.");
-        Console.Write("CIPP URL (https://your-cipp-host): ");
-        var origin = ValidateBaseUrl(Console.ReadLine() ?? "");
-        Console.Write("Your PARTNER tenant ID (not the customer): ");
-        if (!Guid.TryParseExact(Console.ReadLine(), "D", out var partner) || partner == Guid.Empty)
-            throw new ArgumentException("A valid partner tenant ID is required.");
-        Console.WriteLine($"Trust {origin} for partner {partner}? Type TRUST to save:");
+        Instance instance;
+        if (profile is not null)
+        {
+            instance = profile.Connection.Instance;
+            Console.WriteLine("Loaded the CIPP connection included in this package.");
+        }
+        else
+        {
+            Console.Write("CIPP URL (https://your-cipp-host): ");
+            var origin = ValidateBaseUrl(Console.ReadLine() ?? "");
+            Console.Write("Your PARTNER tenant ID (not the customer): ");
+            if (!Guid.TryParseExact(Console.ReadLine(), "D", out var partner) || partner == Guid.Empty)
+                throw new ArgumentException("A valid partner tenant ID is required.");
+            instance = new Instance(origin, partner.ToString());
+        }
+        Console.WriteLine($"Trust {instance.BaseUrl} for partner {instance.PartnerTenantId}? Type TRUST to save:");
         if (Console.ReadLine() != "TRUST") throw new ArgumentException("Setup cancelled. Nothing was enrolled.");
-        var instance = new Instance(origin, partner.ToString());
         var existing = local.ReadInstances().FirstOrDefault(pair => pair.Value == instance);
         var id = existing.Key ?? Guid.NewGuid().ToString();
         local.Enroll(id, instance);
@@ -51,10 +60,10 @@ internal static class Acceptor
         return id;
     }
 
-    private static string SelectInstance(LocalState local)
+    private static string SelectInstance(LocalState local, DeploymentProfile? profile = null)
     {
         var instances = local.ReadInstances().OrderBy(pair => pair.Key).ToArray();
-        if (instances.Length == 0) return Configure(local);
+        if (instances.Length == 0) return Configure(local, profile);
         if (instances.Length == 1) return instances[0].Key;
         for (var i = 0; i < instances.Length; i++)
             Console.WriteLine($"{i + 1}. {instances[i].Value.BaseUrl} (partner {instances[i].Value.PartnerTenantId})");
@@ -86,12 +95,12 @@ internal static class Acceptor
     {
         using var cipp = new CippStatus(State);
         using var creationConnection = new CippStatus(State, new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseDefaultCredentials = false }, new StaffAuthentication().InvitationToken, new OsCredentialVault());
-        return await Run(args, State, (invitation, instance) => Accept(invitation, instance, State), cipp, new CippInvitations(State, creationConnection), OpenBrowser);
+        return await Run(args, State, (invitation, instance) => Accept(invitation, instance, State), cipp, new CippInvitations(State, creationConnection), OpenBrowser, DeploymentProfile.Embedded());
     }
 
     // Tests supply isolated state and an acceptance adapter; no CLI/environment
     // override can redirect the production payload or silently select a tenant.
-    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept, CippStatus? cipp = null, CippInvitations? invitations = null, Action<string>? openBrowser = null)
+    internal static async Task<int> Run(string[] args, string stateDirectory, Func<Invitation, Instance, Task<AcceptanceOutcome>> accept, CippStatus? cipp = null, CippInvitations? invitations = null, Action<string>? openBrowser = null, DeploymentProfile? profile = null)
     {
         try
         {
@@ -100,23 +109,30 @@ internal static class Acceptor
             {
                 Console.WriteLine("gdap-acceptor [<Microsoft-invitation-url>] | configure | queue status | queue resolve | diagnostics export <new-file> | self-test");
                 Console.WriteLine("With no arguments: open the guided workspace for acceptance, queue/recovery, settings and diagnostics. You can still paste an invitation at its home prompt. Customer identity is confirmed after fresh browser sign-in.");
-                Console.WriteLine("Invitation workflow: create | connector configure | cipp open <Microsoft-invitation-url>. Existing-invitation acceptance needs no connector.");
+                Console.WriteLine("Invitation workflow: create | create review | connector configure | cipp open <Microsoft-invitation-url>. Existing-invitation acceptance needs no connector.");
                 return 0;
             }
             var local = new LocalState(stateDirectory);
-            if (args.Length == 0) return await GuidedConsole.Run(local, command => Run(command, stateDirectory, accept, cipp, invitations, openBrowser));
+            if (args.Length == 0) return await GuidedConsole.Run(local, command => Run(command, stateDirectory, accept, cipp, invitations, openBrowser, profile),
+                () => invitations?.ShowPending(local.ReadInstances()) ?? false);
+            if (args.SequenceEqual(new[] { "create", "review" }))
+            {
+                if (invitations is null || local.ReadInstances().Count == 0) { Console.WriteLine("No enrolled creation workflow is available. Nothing changed."); return 1; }
+                var id = SelectInstance(local);
+                return invitations.Review(id, local.ReadInstances()[id]);
+            }
             if (args.SequenceEqual(new[] { "connector", "configure" }) || args.SequenceEqual(new[] { "create" }))
             {
                 if (invitations is null) { Console.WriteLine("Invitation connector is unavailable."); return 1; }
-                var id = SelectInstance(local);
+                var id = SelectInstance(local, profile);
                 var instance = local.ReadInstances()[id];
-                return args[0] == "connector" ? await invitations.Configure(id, instance) : await invitations.Run(id, instance,
-                    (invite, _) => Run([$"gdap-acceptor://v1/accept/{invite.InstanceId}/{invite.RelationshipId}"], stateDirectory, accept, cipp, invitations, openBrowser));
+                return args[0] == "connector" ? await invitations.Configure(id, instance, profile) : await invitations.Run(id, instance,
+                    (invite, _) => Run([$"gdap-acceptor://v1/accept/{invite.InstanceId}/{invite.RelationshipId}"], stateDirectory, accept, cipp, invitations, openBrowser, profile), profile);
             }
             if (args.Length == 3 && args[0] == "cipp" && args[1] == "open")
             {
                 var relationship = ParseMicrosoftInvitation(args[2]);
-                OpenOnboarding(local.ReadInstances()[SelectInstance(local)], relationship, openBrowser);
+                OpenOnboarding(local.ReadInstances()[SelectInstance(local, profile)], relationship, openBrowser);
                 return 0;
             }
             if (cipp is not null && args.SequenceEqual(new[] { "cipp", "configure" }))
@@ -192,7 +208,7 @@ internal static class Acceptor
             else
             {
                 var relationship = ParseMicrosoftInvitation(pastedInput);
-                invitation = new Invitation(SelectInstance(local), relationship);
+                invitation = new Invitation(SelectInstance(local, profile), relationship);
             }
             if (!local.Enqueue(invitation)) { Console.WriteLine("This invitation is already queued or active. Use queue status to inspect it; no acceptance was started here. For a stopped, reviewed run, use queue resolve."); return 1; }
             Console.WriteLine("Waiting for the local acceptance window (up to ten minutes). Use queue status to inspect active or interrupted work.");

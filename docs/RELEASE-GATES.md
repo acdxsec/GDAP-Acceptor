@@ -1,5 +1,25 @@
 # Release gates and known limitations
 
+## Current evidence: 0.4.2 (October 6, 2026)
+
+The operator confirmed invitation creation through CIPP, customer acceptance and
+the final browser action opening the correct CIPP onboarding record, using the
+internally signed deployment-configured Windows 0.4.2 package. This is live
+operator evidence for that workflow, not a claim that CIPP finished onboarding.
+The server missing-attempt correction was separately deployed; its live binary
+matched the published image and its persistent journal survived revision replacement.
+
+Desktop regressions cover independent request deadlines, human review without a
+running network timer, visible retained creation attempts and explicit archival
+without any network request. Missing server records remain uncertain and never
+authorize an automatic retry. Public 0.4.2 packaging excludes organization-specific
+configuration; see [release instructions](RELEASE-0.4.2.md).
+
+Sections below retain historical evidence and outstanding platform/policy limits;
+statements about unpublished development or absent live creation describe those
+earlier milestones, not the current confirmed Windows workflow. No paid signing
+service, automatic updater or signed APT repository was introduced.
+
 ## Invitation-creation development gate
 
 The current source adds CIPP template selection, confirmed invitation creation,

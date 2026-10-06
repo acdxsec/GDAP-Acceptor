@@ -32,17 +32,23 @@ internal sealed class CippStatus : IDisposable
         http = new HttpClient(transport) { Timeout = TimeSpan.FromMinutes(2), MaxResponseContentBufferSize = 262144 };
         this.signIn = signIn; this.legacy = legacy; this.delay = delay ?? Task.Delay;
     }
-    internal Task<int> Configure(string id, Instance instance, bool invitations = false) => Guard(async () =>
+    internal Task<int> Configure(string id, Instance instance, bool invitations = false, DeploymentProfile? profile = null) => Guard(async () =>
     {
-        Console.WriteLine(invitations
+        var connection = invitations ? Load(id, instance) ?? (profile?.Connection.Instance == instance ? profile.Connection : null) : null;
+        if (connection is not null)
+            Console.WriteLine("Loaded connection settings automatically. No IDs, addresses or secrets need to be entered.");
+        else
+        {
+            Console.WriteLine(invitations
             ? "CIPP connector setup. Use the existing companion app registration for both staff sign-in and API access. No second registration or CIPP secret is needed on this computer."
             : "CIPP connector setup. No CIPP API secret is needed on this computer. Use staff app IDs supplied by your server administrator.");
-        var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address [https://cippapi.fizlian.dev]: ");
-        var endpoint = StatusProtocol.Origin(origin.Length == 0 && !invitations ? "https://cippapi.fizlian.dev" : origin);
-        var tenantId = StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: "));
-        var clientId = StatusProtocol.GuidValue(Ask(invitations ? "Companion Application (client) ID (existing registration): " : "Companion desktop application/client ID: "));
-        var apiId = invitations ? clientId : StatusProtocol.GuidValue(Ask("Connector application/client ID: "));
-        var connection = new CentralConnection(instance, endpoint, tenantId, clientId, apiId);
+            var origin = Ask(invitations ? "Invitation connector HTTPS address (from Azure deployment): " : "Central HTTPS address (from your administrator): ");
+            var endpoint = StatusProtocol.Origin(origin);
+            var tenantId = StatusProtocol.GuidValue(Ask("STAFF sign-in tenant ID: "));
+            var clientId = StatusProtocol.GuidValue(Ask(invitations ? "Companion Application (client) ID (existing registration): " : "Companion desktop application/client ID: "));
+            var apiId = invitations ? clientId : StatusProtocol.GuidValue(Ask("Connector application/client ID: "));
+            connection = new CentralConnection(instance, endpoint, tenantId, clientId, apiId);
+        }
         Validate(connection, instance);
         Console.WriteLine($"Central host: {connection.Origin}\nStaff tenant: {connection.TenantId}\nApplication client: {connection.ClientId}\nScope: {StaffAuthentication.RequestScope(connection, invitations ? InvitationProtocol.Scope : StatusProtocol.Scope)}\nExpected CIPP: {instance.BaseUrl}\nExpected partner: {instance.PartnerTenantId}");
         if (Ask("Type CONNECT to sign in and save these non-secret settings: ") != "CONNECT")
@@ -131,7 +137,7 @@ internal sealed class CippStatus : IDisposable
         if (!response.IsSuccessStatusCode)
         {
             var code = (int)response.StatusCode;
-            throw new StatusProblem(response.StatusCode switch
+            var detail = response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => "Staff authentication rejected. Check central app IDs and restart the companion to sign in again.",
                 HttpStatusCode.Forbidden => "Staff access denied. Ask the administrator to verify the required connector role and desktop app permission.",
@@ -140,7 +146,28 @@ internal sealed class CippStatus : IDisposable
                     Math.Ceiling(Math.Clamp((response.Headers.RetryAfter?.Delta ?? response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow ?? TimeSpan.FromSeconds(60)).TotalSeconds, 1, 3600)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " seconds before checking again. No retry was submitted.",
                 _ when code >= 300 && code < 400 => "Redirect refused. Configure the central HTTPS address, not a portal sign-in URL.",
                 _ => "Central status unavailable (HTTP " + code + "). Ask the server administrator to check its configuration."
-            });
+            };
+            // Only named protocol codes may cross this boundary. Never print a
+            // server error body, which may contain upstream credential details.
+            if (path.StartsWith("/v1/invitations", StringComparison.Ordinal))
+            {
+                try
+                {
+                    using var error = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));
+                    if (error.RootElement.TryGetProperty("error", out var value))
+                        detail = value.GetString() switch
+                        {
+                            "persistent_journal_required" => "Invitation creation is disabled or its persistent journal is unavailable. The Azure administrator must check the creation setting and journal mount.",
+                            "creation_not_recorded" => "The connector has no saved record for this operation. No retry was sent. Stop previous sessions and review the operation reference in CIPP before using creation recovery; this response alone is not proof that creation is safe to repeat.",
+                            "creation_uncertain_use_recovery" or "creation_uncertain_no_retry" => "The connector cannot confirm this saved invitation's outcome. Review it in CIPP; do not generate a replacement.",
+                            "status_unavailable" => "The connector could not complete this operation. Check its Azure logs for this request; this does not identify the underlying CIPP error.",
+                            _ => detail
+                        };
+                }
+                catch (JsonException) { }
+                catch (InvalidOperationException) { }
+            }
+            throw new StatusProblem($"HTTP {code}: {detail}");
         }
         var type = response.Content.Headers.ContentType?.MediaType;
         if (type != "application/json" && !(type?.EndsWith("+json", StringComparison.Ordinal) ?? false)) throw new InvalidDataException();
@@ -157,9 +184,10 @@ internal sealed class CippStatus : IDisposable
         Validate(connection, instance);
         return connection;
     }
-    private static void Validate(CentralConnection connection, Instance instance)
+    internal static void Validate(CentralConnection connection, Instance instance)
     {
-        if (connection.Instance != instance || StatusProtocol.Origin(connection.Origin) != connection.Origin ||
+        if (connection.Instance != instance || StatusProtocol.Origin(instance.BaseUrl) != instance.BaseUrl ||
+            StatusProtocol.GuidValue(instance.PartnerTenantId) != instance.PartnerTenantId || StatusProtocol.Origin(connection.Origin) != connection.Origin ||
             StatusProtocol.GuidValue(connection.TenantId) != connection.TenantId || StatusProtocol.GuidValue(connection.ClientId) != connection.ClientId ||
             StatusProtocol.GuidValue(connection.ApiId) != connection.ApiId) throw new InvalidDataException();
     }
@@ -186,5 +214,5 @@ internal sealed class CippStatus : IDisposable
         catch { Console.WriteLine("Central status unavailable. Check connection settings, staff access and server health. GDAP approval is unchanged; no retry was submitted."); return 1; }
     }
     public void Dispose() => http.Dispose();
-    private sealed class StatusProblem(string message) : Exception(message);
+    internal sealed class StatusProblem(string message) : Exception(message);
 }
