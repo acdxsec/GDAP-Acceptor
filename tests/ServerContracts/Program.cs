@@ -72,6 +72,18 @@ try
     }
     var health = await Get("/healthz");
     Assert(health.StatusCode == HttpStatusCode.OK && peer.Calls.Count == 0, "Liveness called CIPP");
+    const string missingOperation = "aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb";
+    settings.InvitationJournalDirectory = root;
+    using (var missing = await Get("/v1/invitations/operations/" + missingOperation, Token(invitations: true)))
+        Assert(missing.StatusCode == HttpStatusCode.NotFound && (await missing.Content.ReadAsStringAsync()).Contains("creation_not_recorded") && peer.Calls.Count == 0,
+            "Missing server attempt is not an explicit read-only not-recorded response");
+    await File.WriteAllTextAsync(Path.Combine(root, missingOperation + ".attempt.json"), "malformed");
+    using (var malformedRecovery = await Get("/v1/invitations/operations/" + missingOperation, Token(invitations: true)))
+        Assert(malformedRecovery.StatusCode == HttpStatusCode.ServiceUnavailable && peer.Calls.Count == 0, "Corrupt journal incorrectly treated as an unrecorded operation");
+    settings.InvitationJournalDirectory = null;
+    using (var disabledRecovery = await Get("/v1/invitations/operations/" + missingOperation, Token(invitations: true)))
+        Assert(disabledRecovery.StatusCode == HttpStatusCode.ServiceUnavailable && peer.Calls.Count == 0, "Disabled journal incorrectly treated as an unrecorded operation");
+    Console.WriteLine("PASS: missing attempt returns explicit 404 without upstream access; corrupt or disabled journals remain failures");
     foreach (var token in new string?[] { null, "not-a-token", Token(wrongKey: true), Token(unsigned: true), Token(audience: "88888888-8888-8888-8888-888888888888"), Token(issuer: "https://untrusted.example"), Token(expiry: DateTime.UtcNow.AddMinutes(-5)) })
     {
         using var denied = await Get("/v1/onboarding/relationship-1", token);

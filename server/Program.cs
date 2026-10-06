@@ -146,8 +146,17 @@ namespace Gdap.Server
             app.MapGet("/v1/invitations/operations/{operationId}", async (string operationId, CippInvitations invitations, HttpContext context) =>
             {
                 if (context.Request.QueryString.HasValue || !Guid.TryParseExact(operationId, "D", out _)) return Results.BadRequest();
-                var result = await invitations.Recover(operationId, context.User.FindFirst("oid")!.Value, context.RequestAborted);
-                return result is null ? Results.Json(new { error = "creation_uncertain_no_retry" }, statusCode: 409) : Results.Ok(result);
+                try
+                {
+                    var result = await invitations.Recover(operationId, context.User.FindFirst("oid")!.Value, context.RequestAborted);
+                    return result is null ? Results.Json(new { error = "creation_uncertain_no_retry" }, statusCode: 409) : Results.Ok(result);
+                }
+                catch (InvitationAttemptNotRecorded)
+                {
+                    // This is not permission to retry: a late request may still
+                    // arrive, or storage may have been replaced. Preserve state.
+                    return Results.Json(new { error = "creation_not_recorded" }, statusCode: 404);
+                }
             }).RequireAuthorization("CreateInvitations");
             app.MapGet("/v1/onboarding/{relationshipId}", async (string relationshipId, CippReader reader, HttpContext context) =>
             {

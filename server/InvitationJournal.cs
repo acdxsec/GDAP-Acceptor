@@ -4,6 +4,7 @@ using Gdap.Status;
 namespace Gdap.Server;
 
 internal sealed record InvitationAttempt(string StaffId, string CippOrigin, string PartnerTenantId, CreateInvitation Request, InviteRole[] Roles);
+internal sealed class InvitationAttemptNotRecorded : Exception;
 
 // This directory MUST be a dedicated persistent shared filesystem, never an
 // ACA container's ephemeral disk. No expiry or automatic reset: uncertain writes
@@ -25,7 +26,11 @@ internal sealed class InvitationJournal(ServiceSettings settings)
     }
     internal InvitationAttempt Read(string operation, string staff)
     {
-        var attempt = Read<InvitationAttempt>(PathFor(operation, ".attempt.json"));
+        var path = PathFor(operation, ".attempt.json");
+        InvitationAttempt attempt;
+        try { attempt = Read<InvitationAttempt>(path); }
+        catch (FileNotFoundException) when (Directory.Exists(settings.InvitationJournalDirectory))
+        { throw new InvitationAttemptNotRecorded(); }
         if (attempt.StaffId != staff || attempt.Request.OperationId != operation || attempt.CippOrigin != settings.CippOrigin ||
             attempt.PartnerTenantId != settings.PartnerTenantId) throw new InvalidDataException();
         return attempt;
